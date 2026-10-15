@@ -20,6 +20,11 @@ import { RoutesPage } from "@/pages/RoutesPage";
 import { RouteNewPage } from "@/pages/RouteNewPage";
 import { RouteDetailPage } from "@/pages/RouteDetailPage";
 import { RatesPage } from "@/pages/RatesPage";
+import { WarehousesPage } from "@/pages/WarehousesPage";
+import { InventoryPage } from "@/pages/InventoryPage";
+import { PurchasesPage } from "@/pages/PurchasesPage";
+import { PurchaseNewPage } from "@/pages/PurchaseNewPage";
+import { PurchaseDetailPage } from "@/pages/PurchaseDetailPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { ComingSoonPage } from "@/pages/ComingSoonPage";
@@ -54,6 +59,11 @@ export function App() {
             <Route path="/routes/new" element={<RouteNewPage />} />
             <Route path="/routes/:id" element={<RouteDetailPage />} />
             <Route path="/rates" element={<RatesPage />} />
+            <Route path="/warehouses" element={<WarehousesPage />} />
+            <Route path="/inventory" element={<InventoryPage />} />
+            <Route path="/purchases" element={<PurchasesPage />} />
+            <Route path="/purchases/new" element={<PurchaseNewPage />} />
+            <Route path="/purchases/:id" element={<PurchaseDetailPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/m/:module" element={<ComingSoonPage />} />

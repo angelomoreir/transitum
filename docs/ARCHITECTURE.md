@@ -67,6 +67,19 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
   `checkpoint` são criados automaticamente quando uma paragem ligada é
   concluída (acompanhamento/tracking).
 
+### Modelo de dados (Fase 4)
+
+- `warehouses` — armazéns `ARM-xxxxx` com morada e flag `active`.
+- `items` — catálogo de artigos (SKU único por tenant, unidade, peso).
+- `stock_levels` — nível de stock por armazém × artigo (`onHand`, `reserved`);
+  upsert com constraint `(tenantId, warehouseId, itemId)`.
+- `stock_movements` — movimentos `in|out|adjust|transfer` com armazém
+  origem/destino, referência (ex.: nº de compra) e autor. Movimentos nunca
+  deixam `onHand` negativo (verificação + reversão).
+- `purchase_orders` + `purchase_order_lines` — compras `PC-xxxxx` a
+  fornecedores com armazém destino; `receivedQty` por linha; receção cria
+  movimentos `in` e recalcula o estado (`partially_received`/`received`).
+
 ## Autenticação e segurança
 
 - **Access token**: JWT 15min (`{sub, tid, role, name, email}`).

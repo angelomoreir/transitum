@@ -413,3 +413,167 @@ export const shipmentCosts = pgTable(
     index("shipment_costs_tenant_idx").on(t.tenantId),
   ],
 );
+
+// ---- Fase 4: armazéns, inventário, compras ----
+
+export const movementTypeEnum = pgEnum("movement_type", [
+  "in",
+  "out",
+  "adjust",
+  "transfer",
+]);
+export const poStatusEnum = pgEnum("po_status", [
+  "draft",
+  "sent",
+  "partially_received",
+  "received",
+  "cancelled",
+]);
+
+export const warehouses = pgTable(
+  "warehouses",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    code: varchar("code", { length: 24 }).notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    addressLine1: varchar("address_line1", { length: 160 }),
+    city: varchar("city", { length: 80 }),
+    postalCode: varchar("postal_code", { length: 16 }),
+    country: varchar("country", { length: 2 }),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("warehouses_tenant_code_unique").on(t.tenantId, t.code),
+    index("warehouses_tenant_idx").on(t.tenantId),
+  ],
+);
+
+export const items = pgTable(
+  "items",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    sku: varchar("sku", { length: 60 }).notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    description: varchar("description", { length: 500 }),
+    unit: varchar("unit", { length: 12 }).notNull().default("un"),
+    weightKg: doublePrecision("weight_kg"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("items_tenant_sku_unique").on(t.tenantId, t.sku),
+    index("items_tenant_idx").on(t.tenantId),
+  ],
+);
+
+export const stockLevels = pgTable(
+  "stock_levels",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id),
+    onHand: integer("on_hand").notNull().default(0),
+    reserved: integer("reserved").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("stock_levels_wh_item_unique").on(t.tenantId, t.warehouseId, t.itemId),
+    index("stock_levels_warehouse_idx").on(t.tenantId, t.warehouseId),
+    index("stock_levels_item_idx").on(t.tenantId, t.itemId),
+  ],
+);
+
+export const stockMovements = pgTable(
+  "stock_movements",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    type: movementTypeEnum("type").notNull(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id),
+    quantity: integer("quantity").notNull(),
+    warehouseId: uuid("warehouse_id").references(() => warehouses.id),
+    toWarehouseId: uuid("to_warehouse_id").references(() => warehouses.id),
+    reference: varchar("reference", { length: 80 }),
+    note: varchar("note", { length: 300 }),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("stock_movements_item_idx").on(t.tenantId, t.itemId),
+    index("stock_movements_warehouse_idx").on(t.tenantId, t.warehouseId),
+    index("stock_movements_tenant_idx").on(t.tenantId, t.createdAt),
+  ],
+);
+
+export const purchaseOrders = pgTable(
+  "purchase_orders",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    number: varchar("number", { length: 24 }).notNull(),
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => partners.id),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    status: poStatusEnum("status").notNull().default("draft"),
+    expectedDate: date("expected_date"),
+    notes: text("notes"),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("purchase_orders_tenant_number_unique").on(t.tenantId, t.number),
+    index("purchase_orders_tenant_idx").on(t.tenantId),
+    index("purchase_orders_supplier_idx").on(t.tenantId, t.supplierId),
+  ],
+);
+
+export const purchaseOrderLines = pgTable(
+  "purchase_order_lines",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    poId: uuid("po_id")
+      .notNull()
+      .references(() => purchaseOrders.id),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id),
+    lineNo: integer("line_no").notNull(),
+    description: varchar("description", { length: 200 }),
+    quantity: integer("quantity").notNull(),
+    receivedQty: integer("received_qty").notNull().default(0),
+    unitPrice: doublePrecision("unit_price"),
+  },
+  (t) => [
+    index("po_lines_po_idx").on(t.poId),
+    index("po_lines_item_idx").on(t.tenantId, t.itemId),
+  ],
+);

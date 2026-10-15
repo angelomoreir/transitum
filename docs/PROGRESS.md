@@ -150,6 +150,49 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
 
 ---
 
+## Fase 4 — Armazéns, inventário e cadeia de abastecimento ✅ (2026-10-15)
+
+### Implementado
+
+- **Armazéns** (`/warehouses`): códigos `ARM-xxxxx`, morada, ativo/inativo,
+  contagem de artigos com stock. CRUD via diálogo.
+- **Artigos** (`/inventory` → separador Artigos): SKU único por tenant
+  (normalizado maiúsculas), nome, unidade, peso, stock total agregado,
+  ativo/inativo.
+- **Níveis de stock** (`stock_levels`): em mão + reservado por armazém ×
+  artigo, com filtro por armazém e pesquisa. Disponível = em mão − reservado.
+- **Movimentos** (`stock_movements`): `in|out|adjust|transfer` com origem/
+  destino, referência e nota; validações (quantidade, stock não negativo,
+  armazéns distintos na transferência); upsert atómico dos níveis.
+- **Compras** (`/purchases`): `PC-xxxxx` para fornecedores, armazém destino,
+  linhas com artigo/qtd/preço, ciclo `draft → sent → partially_received |
+  received | cancelled`. Receção parcial/total por linha — gera movimento
+  `in` e atualiza stock automaticamente, com estado recalculado.
+- **Permissões novas**: `warehouses:*`, `inventory:*`, `purchases:*`
+  (operator recebe `inventory:write` + `purchases:write`).
+- Pesquisa global inclui compras e artigos; dashboard com KPIs "Compras em
+  aberto" e "Artigos em catálogo".
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest (incl. armazéns/artigos/movimentos/compras/tenancy) | **69/69 ✅** |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + build Web | ✅ |
+| Playwright e2e | ✅ 4 testes — inclui armazém→artigo→compra→envio→receção→stock |
+
+### Limitações conhecias
+
+- Campo `reserved` existe no modelo mas sem reserva automática ainda
+  (integração com expedições numa fase posterior).
+- Sem saída automática de stock ao expedir (ship out) — pode ser ligado às
+  expedições/rotas numa fase posterior.
+- Sem números de lote, validade ou localização interna (bins).
+- Alertas de stock mínimo e reposição automática: não implementados.
+
+---
+
 ## Próximas fases (aguarda autorização)
 
-- Fase 4: armazéns, inventário e cadeia de abastecimento.
+- Fase 5: documentação, automatizações e notificações.

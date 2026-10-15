@@ -66,6 +66,9 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
 - **Fase 3**: rotas com paragens ordenadas (`ROT-`), checkpoints automáticos
   na timeline das expedições, tarifas por transportadora e custos de
   expedição.
+- **Fase 4**: armazéns (`ARM-`), catálogo de artigos (SKU), níveis de stock
+  por armazém, movimentos (entrada/saída/ajuste/transferência) e compras a
+  fornecedores (`PC-`) com receção que alimenta o stock.
 
 ## Autenticação
 

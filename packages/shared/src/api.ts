@@ -52,6 +52,8 @@ export const statsSchema = z.object({
   activeShipments: z.number(),
   deliveredShipments: z.number(),
   activeRoutes: z.number(),
+  openPurchases: z.number(),
+  stockItems: z.number(),
   recentEvents: z.array(
     z.object({
       id: z.string(),

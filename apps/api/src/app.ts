@@ -19,9 +19,11 @@ import { createConsoleMailer, type Mailer } from "./lib/mailer.js";
 import { authPlugin } from "./plugins/auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
+import { inventoryRoutes } from "./routes/inventory.js";
 import { miscRoutes } from "./routes/misc.js";
 import { orderRoutes } from "./routes/orders.js";
 import { partnerRoutes } from "./routes/partners.js";
+import { purchaseRoutes } from "./routes/purchases.js";
 import { rateRoutes } from "./routes/rates.js";
 import { routeRoutes } from "./routes/routes.js";
 import { shipmentRoutes } from "./routes/shipments.js";
@@ -128,6 +130,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(shipmentRoutes, { prefix: "/api/shipments" });
   await app.register(routeRoutes, { prefix: "/api/routes" });
   await app.register(rateRoutes, { prefix: "/api/rates" });
+  await app.register(inventoryRoutes, { prefix: "/api" });
+  await app.register(purchaseRoutes, { prefix: "/api/purchase-orders" });
   await app.register(miscRoutes, { prefix: "/api" });
 
   return app;

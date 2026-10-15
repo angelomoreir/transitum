@@ -23,6 +23,8 @@ interface SearchResults {
   orders: { id: string; number: string; status: string }[];
   shipments: { id: string; number: string; status: string }[];
   routes: { id: string; number: string; name: string; status: string }[];
+  purchaseOrders: { id: string; number: string; status: string }[];
+  items: { id: string; sku: string; name: string }[];
 }
 
 const EMPTY: SearchResults = {
@@ -31,6 +33,8 @@ const EMPTY: SearchResults = {
   orders: [],
   shipments: [],
   routes: [],
+  purchaseOrders: [],
+  items: [],
 };
 
 export function SearchPalette({ open, onOpenChange }: Props) {
@@ -156,6 +160,30 @@ export function SearchPalette({ open, onOpenChange }: Props) {
                 ))}
               </CommandGroup>
             )}
+            {results.purchaseOrders.length > 0 && (
+              <CommandGroup heading={t("nav.purchases")}>
+                {results.purchaseOrders.map((p) => (
+                  <CommandItem key={p.id} onSelect={() => go(`/purchases/${p.id}`)}>
+                    <Truck className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-xs">{p.number}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {t(`purchases.statuses.${p.status}`)}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {results.items.length > 0 && (
+              <CommandGroup heading={t("nav.inventory")}>
+                {results.items.map((i) => (
+                  <CommandItem key={i.id} onSelect={() => go("/inventory")}>
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-xs">{i.sku}</span>
+                    <span>{i.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             <CommandGroup heading={t("app.name")}>
               <CommandItem onSelect={() => go("/")}>{t("nav.dashboard")}</CommandItem>
               <CommandItem onSelect={() => go("/partners")}>{t("nav.partners")}</CommandItem>
@@ -163,6 +191,9 @@ export function SearchPalette({ open, onOpenChange }: Props) {
               <CommandItem onSelect={() => go("/shipments")}>{t("nav.shipments")}</CommandItem>
               <CommandItem onSelect={() => go("/routes")}>{t("nav.routes")}</CommandItem>
               <CommandItem onSelect={() => go("/rates")}>{t("nav.rates")}</CommandItem>
+              <CommandItem onSelect={() => go("/warehouses")}>{t("nav.warehouses")}</CommandItem>
+              <CommandItem onSelect={() => go("/inventory")}>{t("nav.inventory")}</CommandItem>
+              <CommandItem onSelect={() => go("/purchases")}>{t("nav.purchases")}</CommandItem>
               <CommandItem onSelect={() => go("/users")}>{t("nav.users")}</CommandItem>
               <CommandItem onSelect={() => go("/settings")}>{t("nav.settings")}</CommandItem>
             </CommandGroup>

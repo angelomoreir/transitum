@@ -4,8 +4,10 @@ import { notificationSchema, statsSchema } from "@blujay/shared";
 import { z } from "zod";
 import {
   auditEvents,
+  items,
   orders,
   partners,
+  purchaseOrders,
   refreshTokens,
   routes,
   shipments,
@@ -33,6 +35,8 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
         [activeShipments],
         [deliveredShipments],
         [activeRoutes],
+        [openPurchases],
+        [stockItems],
         recent,
       ] = await Promise.all([
         app.db
@@ -87,6 +91,22 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(routes)
           .where(and(eq(routes.tenantId, tid), eq(routes.status, "dispatched"))),
         app.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(purchaseOrders)
+          .where(
+            and(
+              eq(purchaseOrders.tenantId, tid),
+              or(
+                eq(purchaseOrders.status, "sent"),
+                eq(purchaseOrders.status, "partially_received"),
+              ),
+            ),
+          ),
+        app.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(items)
+          .where(and(eq(items.tenantId, tid), eq(items.active, true))),
+        app.db
           .select({
             id: auditEvents.id,
             action: auditEvents.action,
@@ -110,6 +130,8 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
         activeShipments: activeShipments.count,
         deliveredShipments: deliveredShipments.count,
         activeRoutes: activeRoutes.count,
+        openPurchases: openPurchases.count,
+        stockItems: stockItems.count,
         recentEvents: recent.map((e) => ({
           id: e.id,
           action: e.action,
@@ -169,6 +191,12 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
             routes: z.array(
               z.object({ id: z.string(), number: z.string(), name: z.string(), status: z.string() }),
             ),
+            purchaseOrders: z.array(
+              z.object({ id: z.string(), number: z.string(), status: z.string() }),
+            ),
+            items: z.array(
+              z.object({ id: z.string(), sku: z.string(), name: z.string() }),
+            ),
           }),
         },
       },
@@ -176,7 +204,7 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req) => {
       const pattern = `%${req.query.q}%`;
       const tid = req.user.tid;
-      const [foundUsers, foundPartners, foundOrders, foundShipments, foundRoutes] =
+      const [foundUsers, foundPartners, foundOrders, foundShipments, foundRoutes, foundPos, foundItems] =
         await Promise.all([
         app.db
           .select({ id: users.id, name: users.name, email: users.email })
@@ -220,6 +248,21 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
             ),
           )
           .limit(5),
+        app.db
+          .select({ id: purchaseOrders.id, number: purchaseOrders.number, status: purchaseOrders.status })
+          .from(purchaseOrders)
+          .where(and(eq(purchaseOrders.tenantId, tid), ilike(purchaseOrders.number, pattern)))
+          .limit(5),
+        app.db
+          .select({ id: items.id, sku: items.sku, name: items.name })
+          .from(items)
+          .where(
+            and(
+              eq(items.tenantId, tid),
+              or(ilike(items.sku, pattern), ilike(items.name, pattern)),
+            ),
+          )
+          .limit(5),
       ]);
       return {
         users: foundUsers,
@@ -227,6 +270,8 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
         orders: foundOrders,
         shipments: foundShipments,
         routes: foundRoutes,
+        purchaseOrders: foundPos,
+        items: foundItems,
       };
     },
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, CheckCircle2, Clock, Package, Route as RouteIcon, Truck, UserCheck, Users } from "lucide-react";
+import { Activity, Boxes, CheckCircle2, Clock, Package, Route as RouteIcon, ShoppingCart, Truck, UserCheck, Users } from "lucide-react";
 import type { Stats } from "@blujay/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -33,6 +33,12 @@ const ACTION_LABELS: Record<string, string> = {
   "rates.created": "Tarifa criada",
   "rates.updated": "Tarifa atualizada",
   "costs.created": "Custo registado",
+  "warehouses.created": "Armazém criado",
+  "items.created": "Artigo criado",
+  "stock.movement": "Movimento de stock",
+  "purchases.created": "Compra criada",
+  "purchases.status_changed": "Estado da compra alterado",
+  "purchases.received": "Receção de compra",
 };
 
 export function DashboardPage() {
@@ -54,6 +60,8 @@ export function DashboardPage() {
     { key: "activeShipments", icon: Truck, value: stats?.activeShipments },
     { key: "deliveredShipments", icon: CheckCircle2, value: stats?.deliveredShipments },
     { key: "activeRoutes", icon: RouteIcon, value: stats?.activeRoutes },
+    { key: "openPurchases", icon: ShoppingCart, value: stats?.openPurchases },
+    { key: "stockItems", icon: Boxes, value: stats?.stockItems },
     { key: "activeUsers", icon: UserCheck, value: stats?.activeUsers },
     { key: "activeSessions", icon: Activity, value: stats?.activeSessions },
   ] as const;
