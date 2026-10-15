@@ -1,0 +1,42 @@
+import { defineConfig, devices } from "@playwright/test";
+
+const API_PORT = 3101;
+const WEB_PORT = 5273;
+
+export default defineConfig({
+  testDir: "./e2e",
+  timeout: 60_000,
+  retries: 0,
+  workers: 1,
+  use: {
+    baseURL: `http://localhost:${WEB_PORT}`,
+    trace: "retain-on-failure",
+  },
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  webServer: [
+    {
+      command: "npm run dev -w @blujay/api",
+      url: `http://127.0.0.1:${API_PORT}/api/health`,
+      timeout: 90_000,
+      reuseExistingServer: false,
+      env: {
+        PORT: String(API_PORT),
+        PGLITE_DIR: ".data/pglite-e2e",
+        NODE_ENV: "test",
+        DATABASE_URL: "",
+        JWT_SECRET: "e2e-secret-key-playwright-only-01234567",
+        WEB_BASE_URL: `http://localhost:${WEB_PORT}`,
+      },
+    },
+    {
+      command: "npm run dev -w @blujay/web",
+      url: `http://localhost:${WEB_PORT}`,
+      timeout: 90_000,
+      reuseExistingServer: false,
+      env: {
+        WEB_PORT: String(WEB_PORT),
+        API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}`,
+      },
+    },
+  ],
+});
