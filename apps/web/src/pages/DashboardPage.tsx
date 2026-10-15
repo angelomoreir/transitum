@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, CheckCircle2, Clock, Package, Truck, UserCheck, Users } from "lucide-react";
+import { Activity, CheckCircle2, Clock, Package, Route as RouteIcon, Truck, UserCheck, Users } from "lucide-react";
 import type { Stats } from "@blujay/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +28,11 @@ const ACTION_LABELS: Record<string, string> = {
   "orders.status_changed": "Estado da encomenda alterado",
   "shipments.created": "Expedição criada",
   "shipments.status_changed": "Estado da expedição alterado",
+  "routes.created": "Rota criada",
+  "routes.status_changed": "Estado da rota alterado",
+  "rates.created": "Tarifa criada",
+  "rates.updated": "Tarifa atualizada",
+  "costs.created": "Custo registado",
 };
 
 export function DashboardPage() {
@@ -48,8 +53,8 @@ export function DashboardPage() {
     { key: "openOrders", icon: Clock, value: stats?.openOrders },
     { key: "activeShipments", icon: Truck, value: stats?.activeShipments },
     { key: "deliveredShipments", icon: CheckCircle2, value: stats?.deliveredShipments },
+    { key: "activeRoutes", icon: RouteIcon, value: stats?.activeRoutes },
     { key: "activeUsers", icon: UserCheck, value: stats?.activeUsers },
-    { key: "pendingInvites", icon: Clock, value: stats?.pendingInvites },
     { key: "activeSessions", icon: Activity, value: stats?.activeSessions },
   ] as const;
 

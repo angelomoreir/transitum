@@ -3,6 +3,8 @@ import { alias } from "drizzle-orm/pg-core";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
   listShipmentsQuerySchema,
+  shipmentCostCreateSchema,
+  shipmentCostDtoSchema,
   shipmentCreateSchema,
   shipmentDetailDtoSchema,
   shipmentDtoSchema,
@@ -14,7 +16,14 @@ import {
   type ShipmentStatus,
 } from "@blujay/shared";
 import { z } from "zod";
-import { orders, partners, shipmentEvents, shipments, users } from "../db/schema.js";
+import {
+  orders,
+  partners,
+  shipmentCosts,
+  shipmentEvents,
+  shipments,
+  users,
+} from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { nextNumber } from "../lib/sequences.js";
@@ -172,19 +181,27 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
         and(eq(shipments.id, req.params.id), eq(shipments.tenantId, req.user.tid)),
       );
       if (!row) throw notFound("Expedição não encontrada");
-      const events = await app.db
-        .select({
-          id: shipmentEvents.id,
-          type: shipmentEvents.type,
-          status: shipmentEvents.status,
-          description: shipmentEvents.description,
-          occurredAt: shipmentEvents.occurredAt,
-          actorName: users.name,
-        })
-        .from(shipmentEvents)
-        .leftJoin(users, eq(shipmentEvents.createdBy, users.id))
-        .where(eq(shipmentEvents.shipmentId, row.shipment.id))
-        .orderBy(asc(shipmentEvents.occurredAt));
+      const [events, costs] = await Promise.all([
+        app.db
+          .select({
+            id: shipmentEvents.id,
+            type: shipmentEvents.type,
+            status: shipmentEvents.status,
+            description: shipmentEvents.description,
+            location: shipmentEvents.location,
+            occurredAt: shipmentEvents.occurredAt,
+            actorName: users.name,
+          })
+          .from(shipmentEvents)
+          .leftJoin(users, eq(shipmentEvents.createdBy, users.id))
+          .where(eq(shipmentEvents.shipmentId, row.shipment.id))
+          .orderBy(asc(shipmentEvents.occurredAt)),
+        app.db
+          .select()
+          .from(shipmentCosts)
+          .where(eq(shipmentCosts.shipmentId, row.shipment.id))
+          .orderBy(asc(shipmentCosts.createdAt)),
+      ]);
       return {
         shipment: {
           ...toDto(row.shipment, {
@@ -197,9 +214,19 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
             type: e.type,
             status: e.status ?? null,
             description: e.description,
+            location: e.location ?? null,
             actorName: e.actorName ?? null,
             occurredAt: e.occurredAt.toISOString(),
           })),
+          costs: costs.map((c) => ({
+            id: c.id,
+            type: c.type,
+            description: c.description,
+            amount: c.amount,
+            currency: c.currency,
+            createdAt: c.createdAt.toISOString(),
+          })),
+          totalCost: costs.reduce((sum, c) => sum + c.amount, 0),
         },
       };
     },
@@ -285,10 +312,13 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
               type: event.type,
               status: event.status,
               description: event.description,
+              location: event.location ?? null,
               actorName: req.user.name,
               occurredAt: event.occurredAt.toISOString(),
             },
           ],
+          costs: [],
+          totalCost: 0,
         },
       });
     },
@@ -408,6 +438,7 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
           type: event.type,
           status: event.status,
           description: event.description,
+          location: event.location ?? null,
           actorName: req.user.name,
           occurredAt: event.occurredAt.toISOString(),
         },
@@ -439,6 +470,7 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
           shipmentId: target.id,
           type: "note",
           description: req.body.description,
+          location: req.body.location ?? null,
           createdBy: req.user.sub,
         })
         .returning();
@@ -448,10 +480,92 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
           type: event.type,
           status: event.status ?? null,
           description: event.description,
+          location: event.location ?? null,
           actorName: req.user.name,
           occurredAt: event.occurredAt.toISOString(),
         },
       });
+    },
+  );
+
+  // ---- Custos da expedição ----
+
+  app.post(
+    "/:id/costs",
+    {
+      preHandler: app.requirePermission("costs:write"),
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        body: shipmentCostCreateSchema,
+        response: { 201: z.object({ cost: shipmentCostDtoSchema }) },
+      },
+    },
+    async (req, reply) => {
+      const [target] = await app.db
+        .select({ id: shipments.id, status: shipments.status })
+        .from(shipments)
+        .where(and(eq(shipments.id, req.params.id), eq(shipments.tenantId, req.user.tid)));
+      if (!target) throw notFound("Expedição não encontrada");
+      if (target.status === "cancelled") {
+        throw badRequest("Não é possível adicionar custos a uma expedição cancelada");
+      }
+      const [cost] = await app.db
+        .insert(shipmentCosts)
+        .values({
+          tenantId: req.user.tid,
+          shipmentId: target.id,
+          type: req.body.type,
+          description: req.body.description,
+          amount: req.body.amount,
+          currency: req.body.currency,
+          createdBy: req.user.sub,
+        })
+        .returning();
+      await audit(app.db, {
+        tenantId: req.user.tid,
+        actorId: req.user.sub,
+        action: "costs.created",
+        entity: "shipment_cost",
+        entityId: cost.id,
+        metadata: { shipmentId: target.id, amount: cost.amount, currency: cost.currency },
+        ip: req.ip,
+      });
+      return reply.code(201).send({
+        cost: {
+          id: cost.id,
+          type: cost.type,
+          description: cost.description,
+          amount: cost.amount,
+          currency: cost.currency,
+          createdAt: cost.createdAt.toISOString(),
+        },
+      });
+    },
+  );
+
+  app.delete(
+    "/:id/costs/:costId",
+    {
+      preHandler: app.requirePermission("costs:write"),
+      schema: {
+        params: z.object({ id: z.string().uuid(), costId: z.string().uuid() }),
+        response: { 200: z.object({ ok: z.literal(true) }) },
+      },
+    },
+    async (req) => {
+      const [cost] = await app.db
+        .select()
+        .from(shipmentCosts)
+        .where(
+          and(
+            eq(shipmentCosts.id, req.params.costId),
+            eq(shipmentCosts.shipmentId, req.params.id),
+            eq(shipmentCosts.tenantId, req.user.tid),
+          ),
+        );
+      if (!cost) throw notFound("Custo não encontrado");
+      await app.db.delete(shipmentCosts).where(eq(shipmentCosts.id, cost.id));
+      return { ok: true as const };
     },
   );
 };

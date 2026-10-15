@@ -41,14 +41,14 @@ const NAV_ITEMS = [
   { to: "/partners", icon: Users, labelKey: "nav.partners" },
   { to: "/orders", icon: Package, labelKey: "nav.orders" },
   { to: "/shipments", icon: Truck, labelKey: "nav.shipments" },
+  { to: "/routes", icon: RouteIcon, labelKey: "nav.routes" },
+  { to: "/rates", icon: BarChart3, labelKey: "nav.rates" },
   { to: "/users", icon: Users, labelKey: "nav.users" },
   { to: "/settings", icon: Settings, labelKey: "nav.settings" },
 ] as const;
 
 // Módulos das próximas fases — visíveis mas marcados "Brevemente"
 const PLANNED_MODULES = [
-  { to: "/m/transport", icon: Truck, labelKey: "nav.sections.transport" },
-  { to: "/m/routes", icon: RouteIcon, labelKey: "nav.sections.reports" },
   { to: "/m/warehouse", icon: Boxes, labelKey: "nav.sections.warehouse" },
   { to: "/m/procurement", icon: ShoppingCart, labelKey: "nav.sections.procurement" },
   { to: "/m/docs", icon: FileText, labelKey: "nav.sections.docs" },

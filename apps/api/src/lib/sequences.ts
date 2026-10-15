@@ -5,6 +5,7 @@ import { sequences } from "../db/schema.js";
 const PREFIX: Record<string, string> = {
   order: "ENC",
   shipment: "EXP",
+  route: "ROT",
   "partner:customer": "CLI",
   "partner:supplier": "FOR",
   "partner:carrier": "TRA",

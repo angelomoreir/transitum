@@ -51,6 +51,22 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
 - `sequences` — contadores por tenant para numeração atómica
   (`nextNumber(db, tenantId, scope)` em `lib/sequences.ts`).
 
+### Modelo de dados (Fase 3)
+
+- `routes` — rotas `ROT-xxxxx` com `carrierId`, condutor/viatura, janela
+  planeada e estados `draft→dispatched→completed|cancelled`
+  (`ROUTE_TRANSITIONS` partilhado).
+- `route_stops` — paragens ordenadas (`seq`) de tipo `pickup|delivery` com
+  morada, `plannedAt`, `arrivedAt`/`doneAt`, ligação opcional a `shipments` e
+  estados `pending→arrived→done|skipped` (`STOP_TRANSITIONS`).
+- `carrier_rates` — tarifas por transportadora: base `flat|per_kg|per_km|
+  per_package`, preço, moeda, `minCharge`, vigência, `active`.
+- `shipment_costs` — linhas de custo por expedição
+  (`freight|fuel|tolls|other`, valor + moeda).
+- `shipment_events.location` — localização opcional; eventos do tipo
+  `checkpoint` são criados automaticamente quando uma paragem ligada é
+  concluída (acompanhamento/tracking).
+
 ## Autenticação e segurança
 
 - **Access token**: JWT 15min (`{sub, tid, role, name, email}`).

@@ -22,6 +22,8 @@ import { healthRoutes } from "./routes/health.js";
 import { miscRoutes } from "./routes/misc.js";
 import { orderRoutes } from "./routes/orders.js";
 import { partnerRoutes } from "./routes/partners.js";
+import { rateRoutes } from "./routes/rates.js";
+import { routeRoutes } from "./routes/routes.js";
 import { shipmentRoutes } from "./routes/shipments.js";
 import { tenantRoutes } from "./routes/tenant.js";
 import { userRoutes } from "./routes/users.js";
@@ -124,6 +126,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(partnerRoutes, { prefix: "/api/partners" });
   await app.register(orderRoutes, { prefix: "/api/orders" });
   await app.register(shipmentRoutes, { prefix: "/api/shipments" });
+  await app.register(routeRoutes, { prefix: "/api/routes" });
+  await app.register(rateRoutes, { prefix: "/api/rates" });
   await app.register(miscRoutes, { prefix: "/api" });
 
   return app;

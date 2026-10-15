@@ -102,6 +102,54 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
 
 ---
 
+## Fase 3 — Transportes, rotas, custos e acompanhamento ✅ (2026-10-15)
+
+### Implementado
+
+- **Rotas** (`/routes`): numeração `ROT-xxxxx`, transportadora, condutor,
+  viatura, janela planeada, estados `draft → dispatched → completed |
+  cancelled` (`ROUTE_TRANSITIONS` partilhado). Lista com pesquisa/filtro,
+  criação com paragens ordenadas (reordenar/remover), detalhe com ações de
+  estado e gestão de paragens.
+- **Paragens** (`route_stops`): tipo `pickup|delivery`, morada, hora prevista,
+  ligação opcional a expedição, estados `pending → arrived → done | skipped`
+  com `arrivedAt`/`doneAt` automáticos. Remoção só em rota `draft`.
+- **Acompanhamento**: concluir uma paragem ligada a expedição gera evento
+  `checkpoint` na timeline da expedição com localização (`shipment_events.location`);
+  notas manuais também aceitam localização.
+- **Tarifas** (`/rates`, `carrier_rates`): por transportadora, base
+  `flat|per_kg|per_km|per_package`, preço, moeda, mínimo, vigência
+  `validFrom/validTo`, ativar/desativar.
+- **Custos** (`shipment_costs`): linhas de custo por expedição
+  (`freight|fuel|tolls|other`) com total no detalhe da expedição.
+- **Permissões novas**: `routes:read|write|status`, `rates:read|write`,
+  `costs:read|write` integradas no RBAC.
+- Pesquisa global inclui rotas; dashboard inclui KPI "Rotas despachadas".
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest (incl. routes/stops/rates/costs/tenancy) | **49/49 ✅** |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + build Web | ✅ |
+| Playwright e2e | ✅ 3 testes — inclui tarifa→expedição→rota→paragem→checkpoint→custo |
+
+### Incidentes resolvidos
+
+- `GET /api/routes` falhava com erro de proxy do Drizzle — campo `stopCount`
+  de subquery sem alias; resolvido com `.as("stopCount")`.
+
+### Limitações conhecidas
+
+- Custos são linhas manuais — sem cálculo automático a partir das tarifas
+  (futuro: motor de rating na Fase 7/faturação).
+- Sem otimização de rotas/mapas (planeamento é manual/ordenado).
+- Estado da expedição não é alterado automaticamente pelos checkpoints —
+  apenas regista o evento (integração automática pode vir depois).
+
+---
+
 ## Próximas fases (aguarda autorização)
 
-- Fase 3: gestão de transportes, rotas, custos e acompanhamento.
+- Fase 4: armazéns, inventário e cadeia de abastecimento.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Package, Truck, User as UserIcon, Users } from "lucide-react";
+import { Package, Route as RouteIcon, Truck, User as UserIcon, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   Command,
@@ -22,9 +22,16 @@ interface SearchResults {
   partners: { id: string; name: string; code: string; types: string[] }[];
   orders: { id: string; number: string; status: string }[];
   shipments: { id: string; number: string; status: string }[];
+  routes: { id: string; number: string; name: string; status: string }[];
 }
 
-const EMPTY: SearchResults = { users: [], partners: [], orders: [], shipments: [] };
+const EMPTY: SearchResults = {
+  users: [],
+  partners: [],
+  orders: [],
+  shipments: [],
+  routes: [],
+};
 
 export function SearchPalette({ open, onOpenChange }: Props) {
   const { t } = useTranslation();
@@ -135,11 +142,27 @@ export function SearchPalette({ open, onOpenChange }: Props) {
                 ))}
               </CommandGroup>
             )}
+            {results.routes.length > 0 && (
+              <CommandGroup heading={t("nav.routes")}>
+                {results.routes.map((r) => (
+                  <CommandItem key={r.id} onSelect={() => go(`/routes/${r.id}`)}>
+                    <RouteIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-xs">{r.number}</span>
+                    <span>{r.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {t(`routes.statuses.${r.status}`)}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             <CommandGroup heading={t("app.name")}>
               <CommandItem onSelect={() => go("/")}>{t("nav.dashboard")}</CommandItem>
               <CommandItem onSelect={() => go("/partners")}>{t("nav.partners")}</CommandItem>
               <CommandItem onSelect={() => go("/orders")}>{t("nav.orders")}</CommandItem>
               <CommandItem onSelect={() => go("/shipments")}>{t("nav.shipments")}</CommandItem>
+              <CommandItem onSelect={() => go("/routes")}>{t("nav.routes")}</CommandItem>
+              <CommandItem onSelect={() => go("/rates")}>{t("nav.rates")}</CommandItem>
               <CommandItem onSelect={() => go("/users")}>{t("nav.users")}</CommandItem>
               <CommandItem onSelect={() => go("/settings")}>{t("nav.settings")}</CommandItem>
             </CommandGroup>

@@ -15,6 +15,13 @@
       "when": 1792048375427,
       "tag": "0001_left_young_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792053399411,
+      "tag": "0002_optimal_skreet",
+      "breakpoints": true
     }
   ]
 }

@@ -63,6 +63,9 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
 - **Fase 2**: parceiros (clientes/fornecedores/transportadoras com códigos
   `CLI-/FOR-/TRA-`), encomendas com linhas (`ENC-`), expedições com ciclo de
   estados e timeline (`EXP-`).
+- **Fase 3**: rotas com paragens ordenadas (`ROT-`), checkpoints automáticos
+  na timeline das expedições, tarifas por transportadora e custos de
+  expedição.
 
 ## Autenticação
 

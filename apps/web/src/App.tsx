@@ -16,6 +16,10 @@ import { OrderDetailPage } from "@/pages/OrderDetailPage";
 import { ShipmentsPage } from "@/pages/ShipmentsPage";
 import { ShipmentNewPage } from "@/pages/ShipmentNewPage";
 import { ShipmentDetailPage } from "@/pages/ShipmentDetailPage";
+import { RoutesPage } from "@/pages/RoutesPage";
+import { RouteNewPage } from "@/pages/RouteNewPage";
+import { RouteDetailPage } from "@/pages/RouteDetailPage";
+import { RatesPage } from "@/pages/RatesPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { ComingSoonPage } from "@/pages/ComingSoonPage";
@@ -46,6 +50,10 @@ export function App() {
             <Route path="/shipments" element={<ShipmentsPage />} />
             <Route path="/shipments/new" element={<ShipmentNewPage />} />
             <Route path="/shipments/:id" element={<ShipmentDetailPage />} />
+            <Route path="/routes" element={<RoutesPage />} />
+            <Route path="/routes/new" element={<RouteNewPage />} />
+            <Route path="/routes/:id" element={<RouteDetailPage />} />
+            <Route path="/rates" element={<RatesPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/m/:module" element={<ComingSoonPage />} />

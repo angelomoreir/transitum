@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { shipmentCostDtoSchema } from "./costs.js";
 
 export const SHIPMENT_STATUSES = [
   "draft",
@@ -59,6 +60,7 @@ export type ShipmentStatusUpdate = z.infer<typeof shipmentStatusUpdateSchema>;
 
 export const shipmentEventCreateSchema = z.object({
   description: z.string().trim().min(1).max(500),
+  location: z.string().trim().max(160).optional(),
 });
 export type ShipmentEventCreateInput = z.infer<typeof shipmentEventCreateSchema>;
 
@@ -67,6 +69,7 @@ export const shipmentEventDtoSchema = z.object({
   type: z.string(),
   status: z.string().nullable(),
   description: z.string(),
+  location: z.string().nullable(),
   actorName: z.string().nullable(),
   occurredAt: z.string(),
 });
@@ -97,6 +100,8 @@ export type ShipmentDto = z.infer<typeof shipmentDtoSchema>;
 
 export const shipmentDetailDtoSchema = shipmentDtoSchema.extend({
   events: z.array(shipmentEventDtoSchema),
+  costs: z.array(shipmentCostDtoSchema),
+  totalCost: z.number(),
 });
 export type ShipmentDetailDto = z.infer<typeof shipmentDetailDtoSchema>;
 
