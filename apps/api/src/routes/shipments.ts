@@ -26,6 +26,7 @@ import {
 } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
+import { notifyTenant } from "../lib/notify.js";
 import { nextNumber } from "../lib/sequences.js";
 import type { DB } from "../db/client.js";
 
@@ -431,6 +432,20 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
         metadata: { from: target.status, to: next },
         ip: req.ip,
       });
+      await notifyTenant(app.db, {
+        tenantId: req.user.tid,
+        trigger: "shipment.status_changed",
+        title: `Expedição ${target.number}: ${STATUS_LABELS[next]}`,
+        link: `/shipments/${target.id}`,
+      });
+      if (next === "delivered") {
+        await notifyTenant(app.db, {
+          tenantId: req.user.tid,
+          trigger: "shipment.delivered",
+          title: `Expedição ${target.number} entregue`,
+          link: `/shipments/${target.id}`,
+        });
+      }
       return {
         shipment: toDto(updated),
         event: {

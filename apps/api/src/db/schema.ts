@@ -577,3 +577,77 @@ export const purchaseOrderLines = pgTable(
     index("po_lines_item_idx").on(t.tenantId, t.itemId),
   ],
 );
+
+// ---- Fase 5: documentos, notificações, automatizações ----
+
+export const docEntityTypeEnum = pgEnum("doc_entity_type", [
+  "shipment",
+  "order",
+  "purchase_order",
+  "partner",
+  "route",
+]);
+
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    entityType: docEntityTypeEnum("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    fileName: varchar("file_name", { length: 200 }).notNull(),
+    mimeType: varchar("mime_type", { length: 100 }).notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: varchar("storage_key", { length: 300 }).notNull(),
+    uploadedBy: uuid("uploaded_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("documents_entity_idx").on(t.tenantId, t.entityType, t.entityId),
+    index("documents_tenant_idx").on(t.tenantId),
+  ],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    type: varchar("type", { length: 60 }).notNull(),
+    title: varchar("title", { length: 200 }).notNull(),
+    body: text("body"),
+    link: varchar("link", { length: 300 }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notifications_user_idx").on(t.userId, t.readAt),
+    index("notifications_tenant_idx").on(t.tenantId, t.createdAt),
+  ],
+);
+
+export const automationRules = pgTable(
+  "automation_rules",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    name: varchar("name", { length: 160 }).notNull(),
+    trigger: varchar("trigger", { length: 60 }).notNull(),
+    action: varchar("action", { length: 40 }).notNull().default("notify"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("automation_rules_tenant_idx").on(t.tenantId),
+    index("automation_rules_trigger_idx").on(t.tenantId, t.trigger, t.active),
+  ],
+);

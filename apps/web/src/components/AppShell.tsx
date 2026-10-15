@@ -18,6 +18,7 @@ import {
   Plug,
   Users,
   X,
+  Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
@@ -46,13 +47,14 @@ const NAV_ITEMS = [
   { to: "/warehouses", icon: Boxes, labelKey: "nav.warehouses" },
   { to: "/inventory", icon: Package, labelKey: "nav.inventory" },
   { to: "/purchases", icon: ShoppingCart, labelKey: "nav.purchases" },
+  { to: "/documents", icon: FileText, labelKey: "nav.documents" },
+  { to: "/automations", icon: Zap, labelKey: "nav.automations" },
   { to: "/users", icon: Users, labelKey: "nav.users" },
   { to: "/settings", icon: Settings, labelKey: "nav.settings" },
 ] as const;
 
 // Módulos das próximas fases — visíveis mas marcados "Brevemente"
 const PLANNED_MODULES = [
-  { to: "/m/docs", icon: FileText, labelKey: "nav.sections.docs" },
   { to: "/m/trade", icon: Globe2, labelKey: "nav.sections.trade" },
   { to: "/m/billing", icon: BarChart3, labelKey: "nav.sections.billing" },
   { to: "/m/integrations", icon: Plug, labelKey: "nav.sections.integrations" },

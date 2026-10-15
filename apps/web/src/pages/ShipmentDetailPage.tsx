@@ -12,6 +12,7 @@ import {
 } from "@blujay/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { DocumentsCard } from "@/components/DocumentsCard";
 import { SHIPMENT_STATUS_VARIANT } from "@/pages/ShipmentsPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -374,6 +375,8 @@ export function ShipmentDetailPage() {
           </ol>
         </CardContent>
       </Card>
+
+      <DocumentsCard entityType="shipment" entityId={shipment.id} />
     </div>
   );
 }

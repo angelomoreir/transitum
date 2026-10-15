@@ -89,3 +89,39 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   }
   return res.json() as Promise<T>;
 }
+
+/** Download binário autenticado (ex.: documentos). */
+export async function apiDownload(path: string): Promise<Blob> {
+  const url = `${BASE}${path}`;
+  const doFetch = () =>
+    fetch(url, {
+      credentials: "include",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+  let res = await doFetch();
+  if (res.status === 401 && accessToken && (await tryRefresh())) {
+    res = await doFetch();
+  }
+  if (!res.ok) throw new ApiRequestError(res.status, "ERROR", "Erro no download");
+  return res.blob();
+}
+
+/** Guarda um blob como ficheiro no browser. */
+export function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Converte um File para base64. */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}

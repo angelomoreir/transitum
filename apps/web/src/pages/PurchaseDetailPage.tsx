@@ -10,6 +10,7 @@ import {
 } from "@blujay/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { DocumentsCard } from "@/components/DocumentsCard";
 import { PO_STATUS_VARIANT } from "@/pages/PurchasesPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -232,6 +233,8 @@ export function PurchaseDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <DocumentsCard entityType="purchase_order" entityId={po.id} />
     </div>
   );
 }

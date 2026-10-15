@@ -16,6 +16,7 @@ import { authTokens, refreshTokens, tenants, users } from "../db/schema.js";
 import { env } from "../env.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, conflict, unauthorized } from "../lib/errors.js";
+import { seedDefaultRules } from "../lib/notify.js";
 import { hashPassword, verifyPassword } from "../lib/passwords.js";
 import {
   clearSessionCookie,
@@ -76,6 +77,9 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
         entityId: tenant.id,
         ip: req.ip,
       });
+
+      // Regras de automatização por omissão do novo tenant
+      await seedDefaultRules(app.db, tenant.id);
 
       await createSession(app.db, reply, user, req);
       return {

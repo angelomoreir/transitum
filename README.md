@@ -69,6 +69,11 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
 - **Fase 4**: armazéns (`ARM-`), catálogo de artigos (SKU), níveis de stock
   por armazém, movimentos (entrada/saída/ajuste/transferência) e compras a
   fornecedores (`PC-`) com receção que alimenta o stock.
+- **Fase 5**: documentos ligados a entidades (upload/download via storage
+  local, preparado para S3), notificações persistidas por utilizador com
+  estado de leitura, e regras de automatização que notificam o tenant em
+  eventos operacionais (expedição entregue, encomenda confirmada, rota
+  concluída, receção de compra, documento carregado).
 
 ## Autenticação
 

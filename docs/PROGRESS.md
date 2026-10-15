@@ -193,6 +193,59 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
 
 ---
 
+## Fase 5 — Documentos, notificações e automatizações ✅ (2026-10-16)
+
+### Implementado
+
+- **Documentos** (`/api/documents`, `/documents`): upload/download/remoção de
+  ficheiros ligados a entidades (`shipment`, `order`, `purchase_order`,
+  `partner`, `route`). Upload via JSON base64 (limite 5 MB, `bodyLimit`
+  dedicado de 8 MB na rota). Storage através da interface `StorageDriver` —
+  implementação local em disco (`STORAGE_DIR`, `.data/storage` em dev,
+  diretório temporário em testes); driver S3/MinIO preparado pela abstração
+  (validação em produção: Fase 8). `storageKey` tenant-scoped, metadados na
+  BD, download com `content-disposition`, remoção limpa o ficheiro.
+- **Notificações persistidas** (`notifications`): por utilizador — tipo,
+  título, corpo, link, `readAt`. `GET /api/notifications` (paginação + filtro
+  `unread=true` + contagem), `POST /:id/read`, `POST /read-all`. O menu de
+  notificações usa estado real do servidor (badge de não lidas, marcar
+  individual/todas, navegação pelo link) — substitui a derivação de auditoria
+  + localStorage.
+- **Automatizações** (`automation_rules`, `/automations`): regras por tenant
+  com gatilho → ação `notify`. Gatilhos: `shipment.status_changed`,
+  `shipment.delivered`, `order.confirmed`, `purchase_order.received`,
+  `route.completed`, `document.uploaded`. Motor `notifyTenant()` em
+  `lib/notify.ts` — se existir regra ativa, cria notificação para todos os
+  utilizadores ativos do tenant. Invocado nos pontos de transição reais
+  (estado de expedição, confirmação de encomenda, conclusão de rota, receção
+  total de compra, upload de documento). Registo de tenant semeia 3 regras
+  por omissão. UI: listar, criar, ativar/desativar, eliminar.
+- **Cartão de documentos** (`DocumentsCard`) nos detalhes de expedição,
+  encomenda, compra e rota; página global `/documents` com pesquisa, filtro
+  por tipo de entidade e paginação.
+- **Permissões novas**: `documents:read|write`, `automations:read|write`
+  (operator não gere automatizações; viewer sem documentos).
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest (incl. documentos, notificações, automatizações, isolamento) | **85/85 ✅** |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + build Web | ✅ |
+| Playwright e2e | ✅ 5 testes — novo: regra → confirmação → notificação → upload → página documentos → marcar lidas |
+
+### Limitações conhecidas
+
+- Storage apenas em disco local — driver S3/MinIO existe como interface,
+  falta implementação e validação em produção (Fase 8).
+- Ação de automatização limitada a notificação in-app (sem email/push/webhook).
+- Sem digitalização/antivírus de ficheiros nem assinatura de URLs de
+  download — hardening na Fase 8.
+- Notificações não são enviadas em tempo real (polling ao abrir o menu).
+
+---
+
 ## Próximas fases (aguarda autorização)
 
-- Fase 5: documentação, automatizações e notificações.
+- Fase 6: comércio internacional, integrações e API.

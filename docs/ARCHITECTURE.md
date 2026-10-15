@@ -80,6 +80,21 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
   fornecedores com armazém destino; `receivedQty` por linha; receção cria
   movimentos `in` e recalcula o estado (`partially_received`/`received`).
 
+### Modelo de dados (Fase 5)
+
+- `documents` — metadados de ficheiros ligados a entidades
+  (`shipment|order|purchase_order|partner|route`): nome, mime, tamanho,
+  `storageKey` (`<tenantId>/<docId>`), autor. Conteúdo fica no
+  `StorageDriver` — `LocalStorage` (`.data/storage`, env `STORAGE_DIR`) em
+  dev/testes; a interface (`put/get/delete`) permite um driver S3/MinIO em
+  produção.
+- `notifications` — notificações persistidas por utilizador: `type`
+  (= gatilho), `title`, `body`, `link`, `readAt`. Não derivam de auditoria.
+- `automation_rules` — regras por tenant `{name, trigger, action="notify",
+  active}`. `notifyTenant()` (lib/notify.ts) verifica regra ativa para o
+  gatilho e cria uma notificação por utilizador ativo do tenant; chamado nos
+  pontos de transição (expedição/encomenda/rota/receção/upload).
+
 ## Autenticação e segurança
 
 - **Access token**: JWT 15min (`{sub, tid, role, name, email}`).

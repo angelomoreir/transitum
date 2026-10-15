@@ -11,6 +11,7 @@ import { z } from "zod";
 import { orderLines, orders, partners, shipments } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
+import { notifyTenant } from "../lib/notify.js";
 import { nextNumber } from "../lib/sequences.js";
 
 const listResponse = z.object({
@@ -260,6 +261,14 @@ export const orderRoutes: FastifyPluginAsyncZod = async (app) => {
         metadata: req.body,
         ip: req.ip,
       });
+      if (req.body.status === "confirmed") {
+        await notifyTenant(app.db, {
+          tenantId: req.user.tid,
+          trigger: "order.confirmed",
+          title: `Encomenda ${updated.number} confirmada`,
+          link: `/orders/${updated.id}`,
+        });
+      }
       return { order: toDto(updated, row.customerName) };
     },
   );

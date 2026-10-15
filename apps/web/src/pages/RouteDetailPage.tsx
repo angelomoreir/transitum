@@ -16,6 +16,7 @@ import {
 } from "@blujay/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { DocumentsCard } from "@/components/DocumentsCard";
 import { ROUTE_STATUS_VARIANT } from "@/pages/RoutesPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -360,6 +361,8 @@ export function RouteDetailPage() {
           </ol>
         </CardContent>
       </Card>
+
+      <DocumentsCard entityType="route" entityId={route.id} />
     </div>
   );
 }

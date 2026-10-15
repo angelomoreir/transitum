@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { and, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
-import { notificationSchema, statsSchema } from "@blujay/shared";
+import { statsSchema } from "@blujay/shared";
 import { z } from "zod";
 import {
   auditEvents,
@@ -137,38 +137,6 @@ export const miscRoutes: FastifyPluginAsyncZod = async (app) => {
           action: e.action,
           actorName: e.actorName ?? null,
           createdAt: e.createdAt.toISOString(),
-        })),
-      };
-    },
-  );
-
-  app.get(
-    "/notifications",
-    {
-      preHandler: app.requirePermission("notifications:read"),
-      schema: { response: { 200: z.object({ items: z.array(notificationSchema) }) } },
-    },
-    async (req) => {
-      const rows = await app.db
-        .select({
-          id: auditEvents.id,
-          action: auditEvents.action,
-          entity: auditEvents.entity,
-          createdAt: auditEvents.createdAt,
-          actorName: users.name,
-        })
-        .from(auditEvents)
-        .leftJoin(users, eq(auditEvents.actorId, users.id))
-        .where(eq(auditEvents.tenantId, req.user.tid))
-        .orderBy(desc(auditEvents.createdAt))
-        .limit(20);
-      return {
-        items: rows.map((r) => ({
-          id: r.id,
-          action: r.action,
-          entity: r.entity ?? null,
-          actorName: r.actorName ?? null,
-          createdAt: r.createdAt.toISOString(),
         })),
       };
     },

@@ -14,6 +14,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   COOKIE_SECURE: z.coerce.boolean().default(false),
   WEB_BASE_URL: z.string().url().default("http://localhost:5173"),
+  STORAGE_DIR: z.string().default(".data/storage"),
 });
 
 export const env = envSchema.parse(process.env);

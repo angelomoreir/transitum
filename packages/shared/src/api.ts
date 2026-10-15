@@ -67,9 +67,11 @@ export type Stats = z.infer<typeof statsSchema>;
 
 export const notificationSchema = z.object({
   id: z.string(),
-  action: z.string(),
-  entity: z.string().nullable(),
-  actorName: z.string().nullable(),
+  type: z.string(),
+  title: z.string(),
+  body: z.string().nullable(),
+  link: z.string().nullable(),
+  readAt: z.string().nullable(),
   createdAt: z.string(),
 });
 export type NotificationDto = z.infer<typeof notificationSchema>;

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { OrderDetailDto } from "@blujay/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { DocumentsCard } from "@/components/DocumentsCard";
 import { ORDER_STATUS_VARIANT } from "@/pages/OrdersPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -165,6 +166,8 @@ export function OrderDetailPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <DocumentsCard entityType="order" entityId={order.id} />
     </div>
   );
 }

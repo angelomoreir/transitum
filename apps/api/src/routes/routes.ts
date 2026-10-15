@@ -25,6 +25,7 @@ import {
 } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
+import { notifyTenant } from "../lib/notify.js";
 import { nextNumber } from "../lib/sequences.js";
 
 const listResponse = z.object({
@@ -421,6 +422,14 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
         metadata: { from: target.status, to: next },
         ip: req.ip,
       });
+      if (next === "completed") {
+        await notifyTenant(app.db, {
+          tenantId: req.user.tid,
+          trigger: "route.completed",
+          title: `Rota ${target.number} concluída`,
+          link: `/routes/${target.id}`,
+        });
+      }
       return { route: toDto(updated, null) };
     },
   );

@@ -35,6 +35,10 @@ export const PERMISSIONS = [
   "inventory:write",
   "purchases:read",
   "purchases:write",
+  "documents:read",
+  "documents:write",
+  "automations:read",
+  "automations:write",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -53,6 +57,7 @@ const READ: Permission[] = [
   "warehouses:read",
   "inventory:read",
   "purchases:read",
+  "documents:read",
 ];
 
 const ALL: Permission[] = [...PERMISSIONS];
@@ -76,6 +81,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "warehouses:write",
     "inventory:write",
     "purchases:write",
+    "documents:write",
+    "automations:read",
+    "automations:write",
   ],
   operator: [
     ...READ,
@@ -87,6 +95,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "costs:write",
     "inventory:write",
     "purchases:write",
+    "documents:write",
   ],
   viewer: ["tenant:read", "users:read", "stats:read"],
 };

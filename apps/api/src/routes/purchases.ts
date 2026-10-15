@@ -22,6 +22,7 @@ import {
 } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
+import { notifyTenant } from "../lib/notify.js";
 import { nextNumber } from "../lib/sequences.js";
 
 type PoRow = typeof purchaseOrders.$inferSelect;
@@ -430,6 +431,14 @@ export const purchaseRoutes: FastifyPluginAsyncZod = async (app) => {
         metadata: { number: row.po.number, status: nextStatus },
         ip: req.ip,
       });
+      if (nextStatus === "received") {
+        await notifyTenant(app.db, {
+          tenantId: req.user.tid,
+          trigger: "purchase_order.received",
+          title: `Receção concluída: ${row.po.number}`,
+          link: `/purchases/${row.po.id}`,
+        });
+      }
 
       const freshLines = await app.db
         .select({ line: purchaseOrderLines, item: items })

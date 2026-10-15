@@ -17,10 +17,14 @@ import { createDb, runMigrations, type DB, type DbDriver } from "./db/client.js"
 import { AppError } from "./lib/errors.js";
 import { createConsoleMailer, type Mailer } from "./lib/mailer.js";
 import { authPlugin } from "./plugins/auth.js";
+import { createStorage } from "./lib/storage.js";
 import { authRoutes } from "./routes/auth.js";
+import { automationRoutes } from "./routes/automations.js";
+import { createDocumentRoutes } from "./routes/documents.js";
 import { healthRoutes } from "./routes/health.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { miscRoutes } from "./routes/misc.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import { orderRoutes } from "./routes/orders.js";
 import { partnerRoutes } from "./routes/partners.js";
 import { purchaseRoutes } from "./routes/purchases.js";
@@ -132,6 +136,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(rateRoutes, { prefix: "/api/rates" });
   await app.register(inventoryRoutes, { prefix: "/api" });
   await app.register(purchaseRoutes, { prefix: "/api/purchase-orders" });
+  await app.register(createDocumentRoutes(createStorage()), { prefix: "/api/documents" });
+  await app.register(notificationRoutes, { prefix: "/api" });
+  await app.register(automationRoutes, { prefix: "/api/automations" });
   await app.register(miscRoutes, { prefix: "/api" });
 
   return app;
