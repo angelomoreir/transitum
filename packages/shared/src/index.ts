@@ -8,3 +8,5 @@ export * from "./routes.js";
 export * from "./costs.js";
 export * from "./inventory.js";
 export * from "./docs.js";
+export * from "./trade.js";
+export * from "./integrations.js";

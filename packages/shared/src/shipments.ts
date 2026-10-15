@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { shipmentCostDtoSchema } from "./costs.js";
+import {
+  customsItemDtoSchema,
+  customsStatusSchema,
+  incotermSchema,
+} from "./trade.js";
 
 export const SHIPMENT_STATUSES = [
   "draft",
@@ -38,6 +43,7 @@ export const shipmentCreateSchema = z.object({
   plannedDeliveryAt: z.string().optional(),
   totalWeightKg: z.coerce.number().min(0).optional(),
   packages: z.coerce.number().int().min(1).optional(),
+  incoterm: incotermSchema.optional(),
   notes: z.string().trim().max(2000).optional(),
 });
 export type ShipmentCreateInput = z.infer<typeof shipmentCreateSchema>;
@@ -48,6 +54,7 @@ export const shipmentUpdateSchema = z.object({
   plannedDeliveryAt: z.string().nullish(),
   totalWeightKg: z.coerce.number().min(0).nullish(),
   packages: z.coerce.number().int().min(1).nullish(),
+  incoterm: incotermSchema.nullish(),
   notes: z.string().trim().max(2000).nullish(),
 });
 export type ShipmentUpdateInput = z.infer<typeof shipmentUpdateSchema>;
@@ -93,6 +100,8 @@ export const shipmentDtoSchema = z.object({
   deliveredAt: z.string().nullable(),
   totalWeightKg: z.number().nullable(),
   packages: z.number().nullable(),
+  incoterm: incotermSchema.nullable(),
+  customsStatus: customsStatusSchema,
   notes: z.string().nullable(),
   createdAt: z.string(),
 });
@@ -101,6 +110,7 @@ export type ShipmentDto = z.infer<typeof shipmentDtoSchema>;
 export const shipmentDetailDtoSchema = shipmentDtoSchema.extend({
   events: z.array(shipmentEventDtoSchema),
   costs: z.array(shipmentCostDtoSchema),
+  customsItems: z.array(customsItemDtoSchema),
   totalCost: z.number(),
 });
 export type ShipmentDetailDto = z.infer<typeof shipmentDetailDtoSchema>;

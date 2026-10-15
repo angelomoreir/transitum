@@ -13,10 +13,13 @@ import {
   shipmentStatusUpdateSchema,
   shipmentUpdateSchema,
   SHIPMENT_TRANSITIONS,
+  type CustomsStatus,
+  type Incoterm,
   type ShipmentStatus,
 } from "@blujay/shared";
 import { z } from "zod";
 import {
+  customsItems,
   orders,
   partners,
   shipmentCosts,
@@ -71,6 +74,8 @@ function toDto(
     deliveredAt: s.deliveredAt?.toISOString() ?? null,
     totalWeightKg: s.totalWeightKg ?? null,
     packages: s.packages ?? null,
+    incoterm: (s.incoterm as Incoterm | null) ?? null,
+    customsStatus: s.customsStatus as CustomsStatus,
     notes: s.notes ?? null,
     createdAt: s.createdAt.toISOString(),
   };
@@ -182,7 +187,7 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
         and(eq(shipments.id, req.params.id), eq(shipments.tenantId, req.user.tid)),
       );
       if (!row) throw notFound("Expedição não encontrada");
-      const [events, costs] = await Promise.all([
+      const [events, costs, customs] = await Promise.all([
         app.db
           .select({
             id: shipmentEvents.id,
@@ -202,6 +207,11 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(shipmentCosts)
           .where(eq(shipmentCosts.shipmentId, row.shipment.id))
           .orderBy(asc(shipmentCosts.createdAt)),
+        app.db
+          .select()
+          .from(customsItems)
+          .where(eq(customsItems.shipmentId, row.shipment.id))
+          .orderBy(asc(customsItems.createdAt)),
       ]);
       return {
         shipment: {
@@ -226,6 +236,16 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
             amount: c.amount,
             currency: c.currency,
             createdAt: c.createdAt.toISOString(),
+          })),
+          customsItems: customs.map((c) => ({
+            id: c.id,
+            description: c.description,
+            hsCode: c.hsCode ?? null,
+            originCountry: c.originCountry ?? null,
+            quantity: c.quantity,
+            weightKg: c.weightKg ?? null,
+            value: c.value ?? null,
+            currency: c.currency,
           })),
           totalCost: costs.reduce((sum, c) => sum + c.amount, 0),
         },
@@ -280,6 +300,7 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
           plannedDeliveryAt: body.plannedDeliveryAt ? new Date(body.plannedDeliveryAt) : null,
           totalWeightKg: body.totalWeightKg ?? null,
           packages: body.packages ?? null,
+          incoterm: body.incoterm ?? null,
           notes: body.notes ?? null,
           createdBy: req.user.sub,
         })
@@ -319,6 +340,7 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
             },
           ],
           costs: [],
+          customsItems: [],
           totalCost: 0,
         },
       });
@@ -367,6 +389,7 @@ export const shipmentRoutes: FastifyPluginAsyncZod = async (app) => {
           totalWeightKg:
             req.body.totalWeightKg === null ? null : (req.body.totalWeightKg ?? undefined),
           packages: req.body.packages === null ? null : (req.body.packages ?? undefined),
+          incoterm: req.body.incoterm === null ? null : (req.body.incoterm ?? undefined),
           notes: req.body.notes === null ? null : (req.body.notes ?? undefined),
           updatedAt: new Date(),
         })

@@ -74,6 +74,11 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
   estado de leitura, e regras de automatização que notificam o tenant em
   eventos operacionais (expedição entregue, encomenda confirmada, rota
   concluída, receção de compra, documento carregado).
+- **Fase 6**: comércio internacional — Incoterms, estado aduaneiro e artigos
+  para despacho nas expedições, fatura comercial em CSV; integrações — chaves
+  de API (`x-api-key`) com API pública `/api/v1` documentada no OpenAPI, e
+  webhooks assinados (HMAC) como ação das regras de automatização, com log de
+  entregas.
 
 ## Autenticação
 

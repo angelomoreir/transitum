@@ -61,6 +61,7 @@ export const listNotificationsQuerySchema = z.object({
 export const AUTOMATION_TRIGGERS = [
   "shipment.status_changed",
   "shipment.delivered",
+  "shipment.customs_cleared",
   "order.confirmed",
   "purchase_order.received",
   "route.completed",
@@ -69,15 +70,21 @@ export const AUTOMATION_TRIGGERS = [
 export type AutomationTrigger = (typeof AUTOMATION_TRIGGERS)[number];
 export const automationTriggerSchema = z.enum(AUTOMATION_TRIGGERS);
 
-export const AUTOMATION_ACTIONS = ["notify"] as const;
+export const AUTOMATION_ACTIONS = ["notify", "webhook"] as const;
 export type AutomationAction = (typeof AUTOMATION_ACTIONS)[number];
 
-export const automationCreateSchema = z.object({
-  name: z.string().trim().min(2).max(160),
-  trigger: automationTriggerSchema,
-  action: z.enum(AUTOMATION_ACTIONS).default("notify"),
-  active: z.boolean().default(true),
-});
+export const automationCreateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(160),
+    trigger: automationTriggerSchema,
+    action: z.enum(AUTOMATION_ACTIONS).default("notify"),
+    webhookUrl: z.string().trim().url().max(300).optional(),
+    active: z.boolean().default(true),
+  })
+  .refine((v) => v.action !== "webhook" || !!v.webhookUrl, {
+    message: "webhookUrl obrigatório para ação webhook",
+    path: ["webhookUrl"],
+  });
 export type AutomationCreateInput = z.infer<typeof automationCreateSchema>;
 
 export const automationUpdateSchema = z.object({
@@ -91,6 +98,7 @@ export const automationDtoSchema = z.object({
   name: z.string(),
   trigger: automationTriggerSchema,
   action: z.enum(AUTOMATION_ACTIONS),
+  webhookUrl: z.string().nullable(),
   active: z.boolean(),
   createdAt: z.string(),
 });

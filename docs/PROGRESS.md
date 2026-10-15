@@ -246,6 +246,55 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
 
 ---
 
+## Fase 6 — Comércio internacional, integrações e API ✅ (2026-10-16)
+
+### Implementado
+
+- **Alfândega nas expedições**: `incoterm` (10 Incoterms 2020) e
+  `customs_status` (`none→prepared→submitted→cleared|held` com transições
+  validadas por `CUSTOMS_TRANSITIONS`); eventos `customs` na timeline;
+  `customs_items` por expedição (descrição, HS code 4–10 dígitos, país de
+  origem, quantidade, peso, valor, moeda); exportação de **fatura comercial
+  em CSV** (`GET /api/shipments/:id/commercial-invoice.csv`) com exportador,
+  destinatário, incoterm e linhas. Gatilho novo `shipment.customs_cleared`.
+- **Chaves de API** (`/api/integrations/keys`): formato `bjk_<prefixo>_<segredo>`,
+  guardado como hash sha256 (segredo mostrado uma única vez), `lastUsedAt`,
+  revogação (soft). Header `x-api-key` autentica a API pública.
+- **API pública v1** (`/api/v1/*`, tag «Public API» no OpenAPI): `GET/POST
+  /orders`, `GET /orders/:id`, `GET /shipments`, `GET /shipments/:id` — mesmas
+  DTOs e validações; aceita `x-api-key` (âmbito operador do tenant) ou Bearer JWT.
+- **Webhooks**: ação `webhook` nas regras de automatização com `webhookUrl` +
+  segredo HMAC por regra; POST JSON assinado (`x-blujay-signature:
+  sha256=...`), timeout 5s, log em `webhook_deliveries` (status, duração,
+  erro). UI de automatizações com seletor de ação + URL; página
+  `/integrations` com chaves e entregas.
+- **Permissões novas**: `trade:read|write`, `integrations:read|write`
+  (manager/admin; operator só `trade:write`).
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest (incl. customs, chaves, v1, webhook com servidor local real) | **97/97 ✅** |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + build Web | ✅ |
+| Playwright e2e | ✅ 6 testes — novo: incoterm+artigo+transição aduaneira+evento, criar chave → `fetch("/api/v1/shipments")` autenticado |
+
+### Limitações conhecidas
+
+- Webhooks: entrega síncrona best-effort (sem retry/fila); assinatura HMAC
+  por regra, payload genérico `{trigger,title,body,link,at}`.
+- API v1 sem rate limiting dedicado nem scopes por chave (âmbito fixo
+  «operator»); chaves não expiram.
+- Fatura comercial é CSV simples (sem PDF/logótipo nem campos fiscais
+  completos — ex.: valores por linha vs. totals separados por moeda).
+- Sem declarativas aduaneiras formais (MRN, SAD, AES) — apenas dados para
+  instrução documental.
+- `operations.spec.ts` continua a falhar esporadicamente sob carga (flake de
+  timing, passa isolado — pendente de investigação na Fase 8).
+
+---
+
 ## Próximas fases (aguarda autorização)
 
-- Fase 6: comércio internacional, integrações e API.
+- Fase 7: subscrições, faturação e administração SaaS.

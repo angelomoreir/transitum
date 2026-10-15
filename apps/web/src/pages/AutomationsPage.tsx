@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Plus, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import {
+  AUTOMATION_ACTIONS,
   AUTOMATION_TRIGGERS,
+  type AutomationAction,
   type AutomationDto,
   type AutomationTrigger,
 } from "@blujay/shared";
@@ -37,6 +39,8 @@ export function AutomationsPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [trigger, setTrigger] = useState<AutomationTrigger>("shipment.delivered");
+  const [action, setAction] = useState<AutomationAction>("notify");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -57,11 +61,17 @@ export function AutomationsPage() {
     try {
       await api("/api/automations", {
         method: "POST",
-        body: { name, trigger, action: "notify" },
+        body: {
+          name,
+          trigger,
+          action,
+          webhookUrl: action === "webhook" ? webhookUrl : undefined,
+        },
       });
       toast.success(t("automations.created"));
       setOpen(false);
       setName("");
+      setWebhookUrl("");
       await load();
     } catch (err) {
       toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
@@ -141,9 +151,36 @@ export function AutomationsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {t("automations.action")}: {t("automations.actions.notify")}
-                </p>
+                <div className="space-y-2">
+                  <Label>{t("automations.action")}</Label>
+                  <Select
+                    value={action}
+                    onValueChange={(v) => setAction(v as AutomationAction)}
+                  >
+                    <SelectTrigger data-testid="automation-action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUTOMATION_ACTIONS.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {t(`automations.actions.${a}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {action === "webhook" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="rule-webhook">{t("automations.webhookUrl")}</Label>
+                    <Input
+                      id="rule-webhook"
+                      type="url"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      placeholder={t("automations.webhookUrlPlaceholder")}
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>
@@ -151,7 +188,9 @@ export function AutomationsPage() {
                 </Button>
                 <Button
                   onClick={() => void create()}
-                  disabled={busy || name.trim().length < 2}
+                  disabled={
+                    busy || name.trim().length < 2 || (action === "webhook" && !webhookUrl.trim())
+                  }
                   data-testid="automation-save"
                 >
                   {t("common.create")}
@@ -174,6 +213,7 @@ export function AutomationsPage() {
                 <p className="text-xs text-muted-foreground">
                   {t(`automations.triggers.${r.trigger}`)} →{" "}
                   {t(`automations.actions.${r.action}`)}
+                  {r.webhookUrl ? ` (${r.webhookUrl})` : ""}
                 </p>
               </div>
               {can("automations:write") ? (

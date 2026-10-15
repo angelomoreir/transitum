@@ -6,6 +6,7 @@ import {
   automationUpdateSchema,
   type AutomationTrigger,
 } from "@blujay/shared";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { automationRules } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
@@ -17,7 +18,8 @@ const toDto = (r: RuleRow) => ({
   id: r.id,
   name: r.name,
   trigger: r.trigger as AutomationTrigger,
-  action: r.action as "notify",
+  action: r.action as "notify" | "webhook",
+  webhookUrl: r.webhookUrl ?? null,
   active: r.active,
   createdAt: r.createdAt.toISOString(),
 });
@@ -49,9 +51,16 @@ export const automationRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (req, reply) => {
+      const { webhookUrl, ...rest } = req.body;
       const [rule] = await app.db
         .insert(automationRules)
-        .values({ tenantId: req.user.tid, ...req.body })
+        .values({
+          tenantId: req.user.tid,
+          ...rest,
+          webhookUrl: rest.action === "webhook" ? webhookUrl : null,
+          webhookSecret:
+            rest.action === "webhook" ? randomBytes(16).toString("hex") : null,
+        })
         .returning();
       await audit(app.db, {
         tenantId: req.user.tid,

@@ -20,8 +20,10 @@ import { authPlugin } from "./plugins/auth.js";
 import { createStorage } from "./lib/storage.js";
 import { authRoutes } from "./routes/auth.js";
 import { automationRoutes } from "./routes/automations.js";
+import { customsRoutes } from "./routes/customs.js";
 import { createDocumentRoutes } from "./routes/documents.js";
 import { healthRoutes } from "./routes/health.js";
+import { integrationRoutes } from "./routes/integrations.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { miscRoutes } from "./routes/misc.js";
 import { notificationRoutes } from "./routes/notifications.js";
@@ -32,6 +34,7 @@ import { rateRoutes } from "./routes/rates.js";
 import { routeRoutes } from "./routes/routes.js";
 import { shipmentRoutes } from "./routes/shipments.js";
 import { tenantRoutes } from "./routes/tenant.js";
+import { publicApiRoutes } from "./routes/v1.js";
 import { userRoutes } from "./routes/users.js";
 
 declare module "fastify" {
@@ -139,6 +142,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(createDocumentRoutes(createStorage()), { prefix: "/api/documents" });
   await app.register(notificationRoutes, { prefix: "/api" });
   await app.register(automationRoutes, { prefix: "/api/automations" });
+  await app.register(customsRoutes, { prefix: "/api" });
+  await app.register(integrationRoutes, { prefix: "/api/integrations" });
+  await app.register(publicApiRoutes, { prefix: "/api/v1" });
   await app.register(miscRoutes, { prefix: "/api" });
 
   return app;

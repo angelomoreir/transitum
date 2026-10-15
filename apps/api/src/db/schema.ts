@@ -218,6 +218,14 @@ export const orderLines = pgTable(
   (t) => [index("order_lines_order_idx").on(t.orderId)],
 );
 
+export const customsStatusEnum = pgEnum("customs_status", [
+  "none",
+  "prepared",
+  "submitted",
+  "cleared",
+  "held",
+]);
+
 export const shipments = pgTable(
   "shipments",
   {
@@ -245,6 +253,8 @@ export const shipments = pgTable(
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     totalWeightKg: doublePrecision("total_weight_kg"),
     packages: integer("packages"),
+    incoterm: varchar("incoterm", { length: 4 }),
+    customsStatus: customsStatusEnum("customs_status").notNull().default("none"),
     notes: text("notes"),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -643,6 +653,8 @@ export const automationRules = pgTable(
     name: varchar("name", { length: 160 }).notNull(),
     trigger: varchar("trigger", { length: 60 }).notNull(),
     action: varchar("action", { length: 40 }).notNull().default("notify"),
+    webhookUrl: varchar("webhook_url", { length: 300 }),
+    webhookSecret: varchar("webhook_secret", { length: 80 }),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -650,4 +662,69 @@ export const automationRules = pgTable(
     index("automation_rules_tenant_idx").on(t.tenantId),
     index("automation_rules_trigger_idx").on(t.tenantId, t.trigger, t.active),
   ],
+);
+
+// ---- Fase 6: comércio internacional, integrações, API pública ----
+// (customsStatusEnum declarado antes de `shipments`)
+
+export const customsItems = pgTable(
+  "customs_items",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    shipmentId: uuid("shipment_id")
+      .notNull()
+      .references(() => shipments.id),
+    description: varchar("description", { length: 200 }).notNull(),
+    hsCode: varchar("hs_code", { length: 10 }),
+    originCountry: varchar("origin_country", { length: 2 }),
+    quantity: doublePrecision("quantity").notNull().default(1),
+    weightKg: doublePrecision("weight_kg"),
+    value: doublePrecision("value"),
+    currency: varchar("currency", { length: 3 }).notNull().default("EUR"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("customs_items_shipment_idx").on(t.tenantId, t.shipmentId)],
+);
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    name: varchar("name", { length: 120 }).notNull(),
+    prefix: varchar("prefix", { length: 12 }).notNull(),
+    keyHash: varchar("key_hash", { length: 64 }).notNull(),
+    active: boolean("active").notNull().default(true),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("api_keys_tenant_idx").on(t.tenantId),
+    index("api_keys_hash_idx").on(t.keyHash),
+  ],
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    ruleId: uuid("rule_id").references(() => automationRules.id),
+    url: varchar("url", { length: 300 }).notNull(),
+    trigger: varchar("trigger", { length: 60 }).notNull(),
+    statusCode: integer("status_code"),
+    success: boolean("success").notNull().default(false),
+    durationMs: integer("duration_ms"),
+    error: varchar("error", { length: 300 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("webhook_deliveries_tenant_idx").on(t.tenantId, t.createdAt)],
 );

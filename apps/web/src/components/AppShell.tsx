@@ -49,6 +49,7 @@ const NAV_ITEMS = [
   { to: "/purchases", icon: ShoppingCart, labelKey: "nav.purchases" },
   { to: "/documents", icon: FileText, labelKey: "nav.documents" },
   { to: "/automations", icon: Zap, labelKey: "nav.automations" },
+  { to: "/integrations", icon: Plug, labelKey: "nav.integrations" },
   { to: "/users", icon: Users, labelKey: "nav.users" },
   { to: "/settings", icon: Settings, labelKey: "nav.settings" },
 ] as const;
@@ -57,7 +58,6 @@ const NAV_ITEMS = [
 const PLANNED_MODULES = [
   { to: "/m/trade", icon: Globe2, labelKey: "nav.sections.trade" },
   { to: "/m/billing", icon: BarChart3, labelKey: "nav.sections.billing" },
-  { to: "/m/integrations", icon: Plug, labelKey: "nav.sections.integrations" },
 ] as const;
 
 export function AppShell() {

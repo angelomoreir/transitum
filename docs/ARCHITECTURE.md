@@ -90,10 +90,21 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
   produção.
 - `notifications` — notificações persistidas por utilizador: `type`
   (= gatilho), `title`, `body`, `link`, `readAt`. Não derivam de auditoria.
-- `automation_rules` — regras por tenant `{name, trigger, action="notify",
-  active}`. `notifyTenant()` (lib/notify.ts) verifica regra ativa para o
-  gatilho e cria uma notificação por utilizador ativo do tenant; chamado nos
-  pontos de transição (expedição/encomenda/rota/receção/upload).
+- `automation_rules` — regras por tenant `{name, trigger, action="notify"|
+  "webhook", webhookUrl, webhookSecret(HMAC), active}`. `notifyTenant()`
+  (lib/notify.ts) verifica regras ativas para o gatilho: `notify` cria uma
+  notificação por utilizador ativo do tenant; `webhook` faz POST JSON
+  assinado (`x-blujay-signature: sha256=...`) e regista em
+  `webhook_deliveries`. Chamado nos pontos de transição
+  (expedição/encomenda/rota/receção/upload/alfândega).
+- `customs_items` + `shipments.incoterm`/`customs_status` — dados aduaneiros
+  por expedição; `CUSTOMS_TRANSITIONS` valida o fluxo documental; fatura
+  comercial exportável em CSV.
+- `api_keys` — chaves `bjk_<prefix>_<secret>` (hash sha256 persistido,
+  `lastUsedAt`, revogáveis). Autenticam `/api/v1/*` via `x-api-key` com
+  âmbito de «operator» do tenant.
+- `webhook_deliveries` — log de entregas de webhooks (url, gatilho, status
+  HTTP, duração, erro).
 
 ## Autenticação e segurança
 

@@ -27,6 +27,7 @@ import { PurchaseNewPage } from "@/pages/PurchaseNewPage";
 import { PurchaseDetailPage } from "@/pages/PurchaseDetailPage";
 import { DocumentsPage } from "@/pages/DocumentsPage";
 import { AutomationsPage } from "@/pages/AutomationsPage";
+import { IntegrationsPage } from "@/pages/IntegrationsPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { ComingSoonPage } from "@/pages/ComingSoonPage";
@@ -68,6 +69,7 @@ export function App() {
             <Route path="/purchases/:id" element={<PurchaseDetailPage />} />
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/automations" element={<AutomationsPage />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/m/:module" element={<ComingSoonPage />} />
