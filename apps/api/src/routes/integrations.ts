@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
   apiKeyCreateSchema,
@@ -9,7 +9,8 @@ import { z } from "zod";
 import { apiKeys, users, webhookDeliveries } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { generateApiKey } from "../lib/apikeys.js";
-import { notFound } from "../lib/errors.js";
+import { getSubscriptionWithPlan } from "../lib/billing.js";
+import { forbidden, notFound } from "../lib/errors.js";
 
 export const integrationRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -51,6 +52,19 @@ export const integrationRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (req, reply) => {
+      // Limite de chaves de API do plano de subscrição
+      const sp = await getSubscriptionWithPlan(app.db, req.user.tid);
+      if (sp) {
+        const [{ count: keyCount }] = await app.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(apiKeys)
+          .where(and(eq(apiKeys.tenantId, req.user.tid), eq(apiKeys.active, true)));
+        if (keyCount >= sp.plan.maxApiKeys) {
+          throw forbidden(
+            `Limite do plano ${sp.plan.name} atingido (${sp.plan.maxApiKeys} chaves de API)`,
+          );
+        }
+      }
       const { key, prefix, keyHash } = generateApiKey();
       const [row] = await app.db
         .insert(apiKeys)

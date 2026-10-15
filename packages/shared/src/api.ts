@@ -11,6 +11,7 @@ export const userDtoSchema = z.object({
   email: z.string(),
   role: roleSchema,
   status: userStatusSchema,
+  isPlatformAdmin: z.boolean().default(false),
   lastLoginAt: z.string().nullable(),
   createdAt: z.string(),
 });

@@ -79,6 +79,11 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
   de API (`x-api-key`) com API pública `/api/v1` documentada no OpenAPI, e
   webhooks assinados (HMAC) como ação das regras de automatização, com log de
   entregas.
+- **Fase 7**: subscrições SaaS — planos Starter/Pro/Enterprise com limites
+  (`maxUsers`, `maxApiKeys`), trial de 14 dias no registo, faturas `INV-xxxxx`
+  com emissão/pagamento manual, enforcement de limites e suspensão de tenants;
+  administração da plataforma em `/api/admin` + página `/admin` (bootstrap via
+  `PLATFORM_ADMIN_EMAILS`) e página `/billing` na app.
 
 ## Autenticação
 

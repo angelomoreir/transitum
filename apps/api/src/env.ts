@@ -15,6 +15,7 @@ const envSchema = z.object({
   COOKIE_SECURE: z.coerce.boolean().default(false),
   WEB_BASE_URL: z.string().url().default("http://localhost:5173"),
   STORAGE_DIR: z.string().default(".data/storage"),
+  PLATFORM_ADMIN_EMAILS: z.string().default(""),
 });
 
 export const env = envSchema.parse(process.env);

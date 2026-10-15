@@ -10,6 +10,7 @@ import { z } from "zod";
 import { authTokens, refreshTokens, users } from "../db/schema.js";
 import { env } from "../env.js";
 import { audit } from "../lib/audit.js";
+import { getSubscriptionWithPlan } from "../lib/billing.js";
 import { badRequest, forbidden, notFound } from "../lib/errors.js";
 import { toUserDto } from "../lib/session.js";
 import { generateToken, hashToken } from "../lib/tokens.js";
@@ -52,7 +53,7 @@ export const userRoutes: FastifyPluginAsyncZod = async (app) => {
           .offset((page - 1) * pageSize),
         app.db.select({ count: sql<number>`count(*)::int` }).from(users).where(where),
       ]);
-      return { items: items.map(toUserDto), total: count, page, pageSize };
+      return { items: items.map((u) => toUserDto(u)), total: count, page, pageSize };
     },
   );
 
@@ -88,6 +89,20 @@ export const userRoutes: FastifyPluginAsyncZod = async (app) => {
       const { name, email, role } = req.body;
       const [existing] = await app.db.select({ id: users.id }).from(users).where(eq(users.email, email));
       if (existing) throw badRequest("Já existe um utilizador com este email");
+
+      // Limite de utilizadores do plano de subscrição
+      const sp = await getSubscriptionWithPlan(app.db, req.user.tid);
+      if (sp) {
+        const [{ count: userCount }] = await app.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(users)
+          .where(and(eq(users.tenantId, req.user.tid), ne(users.status, "suspended")));
+        if (userCount >= sp.plan.maxUsers) {
+          throw forbidden(
+            `Limite do plano ${sp.plan.name} atingido (${sp.plan.maxUsers} utilizadores)`,
+          );
+        }
+      }
 
       const [user] = await app.db
         .insert(users)

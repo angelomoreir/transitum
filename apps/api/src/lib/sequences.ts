@@ -11,6 +11,7 @@ const PREFIX: Record<string, string> = {
   "partner:customer": "CLI",
   "partner:supplier": "FOR",
   "partner:carrier": "TRA",
+  invoice: "INV",
 };
 
 /** Incremento atómico por tenant — gera códigos como ENC-00042. */

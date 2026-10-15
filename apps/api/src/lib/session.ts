@@ -51,7 +51,7 @@ export function clearSessionCookie(reply: FastifyReply): void {
   reply.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
 }
 
-export function toUserDto(u: UserRow) {
+export function toUserDto(u: UserRow, isPlatformAdmin = false) {
   return {
     id: u.id,
     tenantId: u.tenantId,
@@ -59,6 +59,7 @@ export function toUserDto(u: UserRow) {
     email: u.email,
     role: u.role,
     status: u.status,
+    isPlatformAdmin,
     lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     createdAt: u.createdAt.toISOString(),
   };

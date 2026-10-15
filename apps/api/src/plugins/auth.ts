@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
+import { eq } from "drizzle-orm";
 import { hasPermission, type Permission, type Role } from "@blujay/shared";
+import { tenants } from "../db/schema.js";
 import { forbidden, unauthorized } from "../lib/errors.js";
 
 declare module "@fastify/jwt" {
@@ -38,6 +40,18 @@ export const authPlugin = fp(async (app) => {
       if (!hasPermission(req.user.role, permission)) {
         throw forbidden();
       }
+      // Tenants suspensos pelo admin da plataforma mantêm leitura, mas não escrita
+      if (!isReadPermission(permission)) {
+        const [tenant] = await app.db
+          .select({ suspendedAt: tenants.suspendedAt })
+          .from(tenants)
+          .where(eq(tenants.id, req.user.tid));
+        if (tenant?.suspendedAt) {
+          throw forbidden("Conta suspensa — contacte o suporte da plataforma");
+        }
+      }
     };
   });
 });
+
+const isReadPermission = (p: Permission) => p.endsWith(":read") || p === "search" || p === "stats:read";

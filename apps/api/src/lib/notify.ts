@@ -111,6 +111,29 @@ export async function notifyTenant(db: DB, input: NotifyInput): Promise<number> 
   return notified;
 }
 
+/** Notificação direta a todos os utilizadores ativos de um tenant (sem gatilho/regras). */
+export async function notifyUsersDirect(
+  db: DB,
+  input: Omit<NotifyInput, "trigger"> & { type: string },
+): Promise<number> {
+  const targets = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.tenantId, input.tenantId), eq(users.status, "active")));
+  if (targets.length === 0) return 0;
+  await db.insert(notifications).values(
+    targets.map((u) => ({
+      tenantId: input.tenantId,
+      userId: u.id,
+      type: input.type,
+      title: input.title,
+      body: input.body ?? null,
+      link: input.link ?? null,
+    })),
+  );
+  return targets.length;
+}
+
 /** Regras por omissão criadas no registo do tenant. */
 export const DEFAULT_RULES = [
   { name: "Expedição entregue", trigger: "shipment.delivered" },

@@ -106,6 +106,23 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
 - `webhook_deliveries` — log de entregas de webhooks (url, gatilho, status
   HTTP, duração, erro).
 
+### Modelo de dados (Fase 7 — SaaS)
+
+- `plans` — planos globais (code único, `priceMonthly`, moeda, `maxUsers`,
+  `maxApiKeys`, `sort`); semeados no arranque por `ensurePlans`.
+- `subscriptions` — 1:1 com tenant (`tenantId` único): `planId`, estado
+  `trialing|active|past_due|cancelled`, `trialEndsAt`, período corrente,
+  `cancelAtPeriodEnd`. Criada no registo (trial 14 dias, Starter).
+- `subscription_invoices` — faturas SaaS por tenant (`INV-xxxxx` via
+  `sequences`), valor/moeda, `open|paid|void`, emissão e pagamento manuais.
+- `platform_admins` — `userId` de administradores da plataforma, sincronizada
+  com a env `PLATFORM_ADMIN_EMAILS` em cada login/registo (a env é a fonte de
+  verdade: remover da env revoga no próximo login).
+- `tenants.suspendedAt` — suspensão pela administração da plataforma:
+  `requirePermission` bloqueia escritas (permissões não `:read`) com 403.
+- Enforcement de plano: `maxUsers` no convite de utilizadores e `maxApiKeys`
+  na criação de chaves — ambos verificados contra a subscrição do tenant.
+
 ## Autenticação e segurança
 
 - **Access token**: JWT 15min (`{sub, tid, role, name, email}`).
@@ -116,6 +133,9 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
 - **RBAC**: `requirePermission(perm)` como preHandler; mapa em
   `packages/shared/src/permissions.ts` — partilhado com o frontend (mesma fonte).
 - Rate limiting em endpoints de auth (10/min), helmet, CORS restrito por env.
+- **Administração da plataforma**: `/api/admin/*` exige JWT + registo em
+  `platform_admins` (não depende de `role` do tenant); operações auditadas no
+  tenant afetado.
 - Erros normalizados: `{error: {code, message, issues?}}`.
 - RGPD: dados mínimos (nome/email/função), auditoria de ações sensíveis,
   eliminação/suspensão por tenant — direito de apagamento/exportação será

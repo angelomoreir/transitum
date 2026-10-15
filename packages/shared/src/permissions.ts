@@ -43,6 +43,8 @@ export const PERMISSIONS = [
   "trade:write",
   "integrations:read",
   "integrations:write",
+  "billing:read",
+  "billing:write",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -63,6 +65,7 @@ const READ: Permission[] = [
   "purchases:read",
   "documents:read",
   "trade:read",
+  "billing:read",
 ];
 
 const ALL: Permission[] = [...PERMISSIONS];
@@ -92,6 +95,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "trade:write",
     "integrations:read",
     "integrations:write",
+    "billing:write",
   ],
   operator: [
     ...READ,

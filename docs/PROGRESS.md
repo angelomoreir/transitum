@@ -295,6 +295,59 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
 
 ---
 
+## Fase 7 — Subscrições, faturação e administração SaaS ✅ (2026-10-16)
+
+### Implementado
+
+- **Planos globais** (`plans`): Starter 29 €/5 users/2 chaves API,
+  Pro 99 €/25/10, Enterprise 499 €/1000/50 — semeados no arranque
+  (`ensurePlans`, idempotente por `code`).
+- **Subscrição por tenant** (`subscriptions`): estado `trialing|active|
+  past_due|cancelled`, `trialEndsAt`, período corrente, `cancelAtPeriodEnd`.
+  O registo cria trial de 14 dias no plano Starter; `tenants.plan` fica
+  sincronizado com o código do plano.
+- **Faturas** (`subscription_invoices`): numeração `INV-xxxxx` por tenant,
+  `open|paid|void`; emissão manual (valor = preço mensal do plano, vencimento
+  +14 dias); pagamento marca `paid`, ativa a subscrição e abre novo período de
+  30 dias; anulação só de faturas em aberto.
+- **Administração da plataforma**: `platform_admins` sincronizada com a env
+  `PLATFORM_ADMIN_EMAILS` em login/registo/aceite de convite; `isPlatformAdmin`
+  no DTO do utilizador. Endpoints `/api/admin/*` com guard dedicado:
+  `GET /tenants` (plano, estado de subscrição, nº de utilizadores, suspensão),
+  `POST /tenants/:id/plan`, `POST /tenants/:id/suspend|activate`,
+  `GET /invoices` (faturas de todos os tenants).
+- **Enforcement de limites**: convite de utilizador rejeitado (403) ao atingir
+  `maxUsers` do plano; criação de chave API rejeitada ao atingir `maxApiKeys`.
+- **Suspensão de tenant** (`tenants.suspendedAt`): `requirePermission`
+  bloqueia qualquer permissão de escrita (403 «Conta suspensa»); leitura
+  mantém-se. Utilizadores do tenant recebem notificação direta
+  (`notifyUsersDirect`, sem regra de automatização).
+- **Permissões novas**: `billing:read|write` — admin/manager escrevem;
+  admin/manager/operator leem. UI `/billing` (plano, uso vs. limites, faturas,
+  mudança de plano) e `/admin` (só platform admins). Migração `0006`.
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **108/108 ✅** (11 novos: trial de 14d, planos, emissão/pagamento/anulação de faturas INV-xxxxx, mudança de plano, limite maxUsers, suspensão lê-não-escreve, isolamento de faturas, auth de admin, suspend/reactivate, faturas globais) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + build Web | ✅ |
+| Playwright e2e | **8/8 ✅** — 2 novos: trial→emitir fatura→pagar→mudar para Pro; admin suspende/reativa tenant com PLATFORM_ADMIN_EMAILS |
+
+### Limitações conhecidas
+
+- Faturação manual — sem gateway de pagamentos (Stripe) nem cobrança
+  recorrente automática; sem prorrata ao mudar de plano.
+- Sem transição automática de trial para `past_due`/`cancelled` nem dunning
+  (precisa de scheduler — Fase 8).
+- Tokens JWT já emitidos continuam válidos para leitura até expirarem (15 min)
+  mesmo com o tenant suspenso — aceitável; hardening na Fase 8.
+- `/api/admin` sem paginação nem filtros (suficiente para volumes iniciais).
+
+---
+
 ## Próximas fases (aguarda autorização)
 
-- Fase 7: subscrições, faturação e administração SaaS.
+- Fase 8: testes globais, hardening de segurança, documentação final e
+  preparação para produção.

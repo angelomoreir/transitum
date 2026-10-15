@@ -1,4 +1,4 @@
-import {
+﻿import {
   boolean,
   date,
   doublePrecision,
@@ -33,6 +33,7 @@ export const tenants = pgTable("tenants", {
   name: varchar("name", { length: 120 }).notNull(),
   slug: varchar("slug", { length: 64 }).notNull(),
   plan: varchar("plan", { length: 32 }).notNull().default("trial"),
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -44,7 +45,7 @@ export const users = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
-    // Email globalmente único — permite login sem selecionar empresa
+    // Email globalmente Ãºnico â€” permite login sem selecionar empresa
     email: varchar("email", { length: 254 }).notNull(),
     name: varchar("name", { length: 120 }).notNull(),
     passwordHash: text("password_hash"),
@@ -127,9 +128,9 @@ export const auditEvents = pgTable(
   ],
 );
 
-// ---- Fase 2: parceiros, encomendas, expedi��es ----
+// ---- Fase 2: parceiros, encomendas, expediï¿½ï¿½es ----
 
-/** Numera��o sequencial por tenant (ENC-00001, EXP-00001, CLI-0001�). */
+/** Numeraï¿½ï¿½o sequencial por tenant (ENC-00001, EXP-00001, CLI-0001ï¿½). */
 export const sequences = pgTable(
   "sequences",
   {
@@ -424,7 +425,7 @@ export const shipmentCosts = pgTable(
   ],
 );
 
-// ---- Fase 4: armazéns, inventário, compras ----
+// ---- Fase 4: armazÃ©ns, inventÃ¡rio, compras ----
 
 export const movementTypeEnum = pgEnum("movement_type", [
   "in",
@@ -588,7 +589,7 @@ export const purchaseOrderLines = pgTable(
   ],
 );
 
-// ---- Fase 5: documentos, notificações, automatizações ----
+// ---- Fase 5: documentos, notificaÃ§Ãµes, automatizaÃ§Ãµes ----
 
 export const docEntityTypeEnum = pgEnum("doc_entity_type", [
   "shipment",
@@ -664,7 +665,7 @@ export const automationRules = pgTable(
   ],
 );
 
-// ---- Fase 6: comércio internacional, integrações, API pública ----
+// ---- Fase 6: comÃ©rcio internacional, integraÃ§Ãµes, API pÃºblica ----
 // (customsStatusEnum declarado antes de `shipments`)
 
 export const customsItems = pgTable(
@@ -728,3 +729,78 @@ export const webhookDeliveries = pgTable(
   },
   (t) => [index("webhook_deliveries_tenant_idx").on(t.tenantId, t.createdAt)],
 );
+
+// â”€â”€ Fase 7: subscriÃ§Ãµes, faturaÃ§Ã£o e administraÃ§Ã£o SaaS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "trialing",
+  "active",
+  "past_due",
+  "cancelled",
+]);
+export const invoiceStatusEnum = pgEnum("saas_invoice_status", ["open", "paid", "void"]);
+
+export const plans = pgTable("plans", {
+  id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  code: varchar("code", { length: 32 }).notNull().unique(),
+  name: varchar("name", { length: 60 }).notNull(),
+  priceMonthly: doublePrecision("price_monthly").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("EUR"),
+  maxUsers: integer("max_users").notNull(),
+  maxApiKeys: integer("max_api_keys").notNull(),
+  active: boolean("active").notNull().default(true),
+  sort: integer("sort").notNull().default(0),
+});
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .unique()
+      .references(() => tenants.id),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => plans.id),
+    status: subscriptionStatusEnum("status").notNull().default("trialing"),
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("subscriptions_status_idx").on(t.status)],
+);
+
+export const subscriptionInvoices = pgTable(
+  "subscription_invoices",
+  {
+    id: uuid("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    number: varchar("number", { length: 20 }).notNull(),
+    amount: doublePrecision("amount").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("EUR"),
+    status: invoiceStatusEnum("status").notNull().default("open"),
+    description: varchar("description", { length: 255 }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("subscription_invoices_tenant_idx").on(t.tenantId, t.createdAt),
+    uniqueIndex("subscription_invoices_tenant_number_idx").on(t.tenantId, t.number),
+  ],
+);
+
+export const platformAdmins = pgTable("platform_admins", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+

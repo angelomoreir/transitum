@@ -15,6 +15,11 @@ import { z } from "zod";
 import { authTokens, refreshTokens, tenants, users } from "../db/schema.js";
 import { env } from "../env.js";
 import { audit } from "../lib/audit.js";
+import {
+  createTrialSubscription,
+  isUserPlatformAdmin,
+  syncPlatformAdmin,
+} from "../lib/billing.js";
 import { badRequest, conflict, unauthorized } from "../lib/errors.js";
 import { seedDefaultRules } from "../lib/notify.js";
 import { hashPassword, verifyPassword } from "../lib/passwords.js";
@@ -80,11 +85,15 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
 
       // Regras de automatização por omissão do novo tenant
       await seedDefaultRules(app.db, tenant.id);
+      // Subscrição trial (14 dias, plano Starter)
+      await createTrialSubscription(app.db, tenant.id);
+      // Platform admin via PLATFORM_ADMIN_EMAILS
+      const isPlatformAdmin = await syncPlatformAdmin(app.db, user);
 
       await createSession(app.db, reply, user, req);
       return {
         accessToken: signAccessToken(app, user),
-        user: toUserDto(user),
+        user: toUserDto(user, isPlatformAdmin),
         tenant: toTenantDto(tenant),
       };
     },
@@ -122,11 +131,12 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
         ip: req.ip,
       });
 
+      const isPlatformAdmin = await syncPlatformAdmin(app.db, user);
       const [tenant] = await app.db.select().from(tenants).where(eq(tenants.id, user.tenantId));
       await createSession(app.db, reply, user, req);
       return {
         accessToken: signAccessToken(app, user),
-        user: toUserDto(user),
+        user: toUserDto(user, isPlatformAdmin),
         tenant: toTenantDto(tenant),
       };
     },
@@ -209,7 +219,8 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
         .where(and(eq(users.id, req.user.sub), eq(users.tenantId, req.user.tid)));
       if (!user) throw unauthorized();
       const [tenant] = await app.db.select().from(tenants).where(eq(tenants.id, user.tenantId));
-      return { user: toUserDto(user), tenant: toTenantDto(tenant) };
+      const isPlatformAdmin = await isUserPlatformAdmin(app.db, user.id);
+      return { user: toUserDto(user, isPlatformAdmin), tenant: toTenantDto(tenant) };
     },
   );
 
@@ -336,11 +347,12 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
         ip: req.ip,
       });
 
+      const isPlatformAdmin = await syncPlatformAdmin(app.db, user);
       const [tenant] = await app.db.select().from(tenants).where(eq(tenants.id, user.tenantId));
       await createSession(app.db, reply, user, req);
       return {
         accessToken: signAccessToken(app, user),
-        user: toUserDto(user),
+        user: toUserDto(user, isPlatformAdmin),
         tenant: toTenantDto(tenant),
       };
     },

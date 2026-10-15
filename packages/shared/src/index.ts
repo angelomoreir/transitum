@@ -10,3 +10,4 @@ export * from "./inventory.js";
 export * from "./docs.js";
 export * from "./trade.js";
 export * from "./integrations.js";
+export * from "./billing.js";

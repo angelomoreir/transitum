@@ -43,6 +43,13 @@
       "when": 1792104983661,
       "tag": "0005_reflective_logan",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792106480233,
+      "tag": "0006_abandoned_gladiator",
+      "breakpoints": true
     }
   ]
 }

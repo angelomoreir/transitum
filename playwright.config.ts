@@ -26,6 +26,7 @@ export default defineConfig({
         DATABASE_URL: "",
         JWT_SECRET: "e2e-secret-key-playwright-only-01234567",
         WEB_BASE_URL: `http://localhost:${WEB_PORT}`,
+        PLATFORM_ADMIN_EMAILS: "e2e-admin@blujay.dev",
       },
     },
     {

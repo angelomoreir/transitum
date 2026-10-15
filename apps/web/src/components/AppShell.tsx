@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Boxes,
   Building2,
+  CreditCard,
   FileText,
   Globe2,
   LayoutDashboard,
@@ -12,6 +13,7 @@ import {
   Route as RouteIcon,
   Search,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   Truck,
   BarChart3,
@@ -50,6 +52,7 @@ const NAV_ITEMS = [
   { to: "/documents", icon: FileText, labelKey: "nav.documents" },
   { to: "/automations", icon: Zap, labelKey: "nav.automations" },
   { to: "/integrations", icon: Plug, labelKey: "nav.integrations" },
+  { to: "/billing", icon: CreditCard, labelKey: "nav.billing" },
   { to: "/users", icon: Users, labelKey: "nav.users" },
   { to: "/settings", icon: Settings, labelKey: "nav.settings" },
 ] as const;
@@ -57,7 +60,6 @@ const NAV_ITEMS = [
 // Módulos das próximas fases — visíveis mas marcados "Brevemente"
 const PLANNED_MODULES = [
   { to: "/m/trade", icon: Globe2, labelKey: "nav.sections.trade" },
-  { to: "/m/billing", icon: BarChart3, labelKey: "nav.sections.billing" },
 ] as const;
 
 export function AppShell() {
@@ -120,6 +122,23 @@ export function AppShell() {
             </NavLink>
           ))}
         </div>
+        {user?.isPlatformAdmin && (
+          <div className="mt-6 space-y-1">
+            <NavLink
+              to="/admin"
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  isActive && "bg-sidebar-accent text-sidebar-foreground",
+                )
+              }
+            >
+              <ShieldCheck className="h-4 w-4" />
+              {t("nav.admin")}
+            </NavLink>
+          </div>
+        )}
       </nav>
       <div className="border-t border-white/10 p-4">
         <p className="truncate text-sm font-medium text-sidebar-foreground">{tenant?.name}</p>

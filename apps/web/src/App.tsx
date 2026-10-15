@@ -28,6 +28,8 @@ import { PurchaseDetailPage } from "@/pages/PurchaseDetailPage";
 import { DocumentsPage } from "@/pages/DocumentsPage";
 import { AutomationsPage } from "@/pages/AutomationsPage";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
+import { BillingPage } from "@/pages/BillingPage";
+import { AdminPage } from "@/pages/AdminPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { ComingSoonPage } from "@/pages/ComingSoonPage";
@@ -70,6 +72,8 @@ export function App() {
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/automations" element={<AutomationsPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/billing" element={<BillingPage />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/m/:module" element={<ComingSoonPage />} />

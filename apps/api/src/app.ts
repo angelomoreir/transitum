@@ -14,12 +14,15 @@ import {
 } from "fastify-type-provider-zod";
 import { env } from "./env.js";
 import { createDb, runMigrations, type DB, type DbDriver } from "./db/client.js";
+import { ensurePlans } from "./lib/billing.js";
 import { AppError } from "./lib/errors.js";
 import { createConsoleMailer, type Mailer } from "./lib/mailer.js";
 import { authPlugin } from "./plugins/auth.js";
 import { createStorage } from "./lib/storage.js";
+import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { automationRoutes } from "./routes/automations.js";
+import { billingRoutes } from "./routes/billing.js";
 import { customsRoutes } from "./routes/customs.js";
 import { createDocumentRoutes } from "./routes/documents.js";
 import { healthRoutes } from "./routes/health.js";
@@ -53,6 +56,7 @@ export interface BuildAppOptions {
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const handle = await createDb();
   await runMigrations(handle);
+  await ensurePlans(handle.db);
 
   const app = Fastify({
     logger:
@@ -145,6 +149,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(customsRoutes, { prefix: "/api" });
   await app.register(integrationRoutes, { prefix: "/api/integrations" });
   await app.register(publicApiRoutes, { prefix: "/api/v1" });
+  await app.register(billingRoutes, { prefix: "/api" });
+  await app.register(adminRoutes, { prefix: "/api/admin" });
   await app.register(miscRoutes, { prefix: "/api" });
 
   return app;
