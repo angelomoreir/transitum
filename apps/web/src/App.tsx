@@ -32,7 +32,6 @@ import { BillingPage } from "@/pages/BillingPage";
 import { AdminPage } from "@/pages/AdminPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { ComingSoonPage } from "@/pages/ComingSoonPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 
 export function App() {
@@ -76,7 +75,6 @@ export function App() {
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/m/:module" element={<ComingSoonPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

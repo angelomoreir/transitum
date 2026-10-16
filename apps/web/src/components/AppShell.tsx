@@ -5,7 +5,6 @@ import {
   Building2,
   CreditCard,
   FileText,
-  Globe2,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -26,7 +25,6 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -55,11 +53,6 @@ const NAV_ITEMS = [
   { to: "/billing", icon: CreditCard, labelKey: "nav.billing" },
   { to: "/users", icon: Users, labelKey: "nav.users" },
   { to: "/settings", icon: Settings, labelKey: "nav.settings" },
-] as const;
-
-// Módulos das próximas fases — visíveis mas marcados "Brevemente"
-const PLANNED_MODULES = [
-  { to: "/m/trade", icon: Globe2, labelKey: "nav.sections.trade" },
 ] as const;
 
 export function AppShell() {
@@ -100,25 +93,6 @@ export function AppShell() {
             >
               <item.icon className="h-4 w-4" />
               {t(item.labelKey)}
-            </NavLink>
-          ))}
-        </div>
-        <div className="mt-6 space-y-1">
-          <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-sidebar-muted/70">
-            {t("nav.sections.operations")}
-          </p>
-          {PLANNED_MODULES.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-muted/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            >
-              <item.icon className="h-4 w-4" />
-              <span className="flex-1">{t(item.labelKey)}</span>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                {t("nav.soon")}
-              </Badge>
             </NavLink>
           ))}
         </div>
