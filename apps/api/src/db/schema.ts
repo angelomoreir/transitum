@@ -1,4 +1,4 @@
-﻿import {
+import {
   boolean,
   date,
   doublePrecision,
@@ -45,7 +45,7 @@ export const users = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
-    // Email globalmente Ãºnico â€” permite login sem selecionar empresa
+    // Email globalmente único — permite login sem selecionar empresa
     email: varchar("email", { length: 254 }).notNull(),
     name: varchar("name", { length: 120 }).notNull(),
     passwordHash: text("password_hash"),
@@ -128,9 +128,9 @@ export const auditEvents = pgTable(
   ],
 );
 
-// ---- Fase 2: parceiros, encomendas, expediï¿½ï¿½es ----
+// ---- Fase 2: parceiros, encomendas, expedições ----
 
-/** Numeraï¿½ï¿½o sequencial por tenant (ENC-00001, EXP-00001, CLI-0001ï¿½). */
+/** Numeração sequencial por tenant (ENC-00001, EXP-00001, CLI-0001). */
 export const sequences = pgTable(
   "sequences",
   {
@@ -425,7 +425,7 @@ export const shipmentCosts = pgTable(
   ],
 );
 
-// ---- Fase 4: armazÃ©ns, inventÃ¡rio, compras ----
+// ---- Fase 4: armazéns, inventário, compras ----
 
 export const movementTypeEnum = pgEnum("movement_type", [
   "in",
@@ -589,7 +589,7 @@ export const purchaseOrderLines = pgTable(
   ],
 );
 
-// ---- Fase 5: documentos, notificaÃ§Ãµes, automatizaÃ§Ãµes ----
+// ---- Fase 5: documentos, notificações, automatizações ----
 
 export const docEntityTypeEnum = pgEnum("doc_entity_type", [
   "shipment",
@@ -665,7 +665,7 @@ export const automationRules = pgTable(
   ],
 );
 
-// ---- Fase 6: comÃ©rcio internacional, integraÃ§Ãµes, API pÃºblica ----
+// ---- Fase 6: comércio internacional, integrações, API pública ----
 // (customsStatusEnum declarado antes de `shipments`)
 
 export const customsItems = pgTable(
@@ -702,6 +702,7 @@ export const apiKeys = pgTable(
     keyHash: varchar("key_hash", { length: 64 }).notNull(),
     active: boolean("active").notNull().default(true),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -721,16 +722,22 @@ export const webhookDeliveries = pgTable(
     ruleId: uuid("rule_id").references(() => automationRules.id),
     url: varchar("url", { length: 300 }).notNull(),
     trigger: varchar("trigger", { length: 60 }).notNull(),
+    payload: jsonb("payload"),
     statusCode: integer("status_code"),
     success: boolean("success").notNull().default(false),
+    attempts: integer("attempts").notNull().default(1),
+    nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
     durationMs: integer("duration_ms"),
     error: varchar("error", { length: 300 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("webhook_deliveries_tenant_idx").on(t.tenantId, t.createdAt)],
+  (t) => [
+    index("webhook_deliveries_tenant_idx").on(t.tenantId, t.createdAt),
+    index("webhook_deliveries_retry_idx").on(t.nextRetryAt),
+  ],
 );
 
-// â”€â”€ Fase 7: subscriÃ§Ãµes, faturaÃ§Ã£o e administraÃ§Ã£o SaaS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Fase 7: subscrições, faturação e administração SaaS ─────────────────────
 
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "trialing",

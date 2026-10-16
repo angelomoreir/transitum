@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull, lt, lte } from "drizzle-orm";
 import type { DB } from "../db/client.js";
 import {
   automationRules,
@@ -17,21 +17,24 @@ interface NotifyInput {
   link?: string;
 }
 
-async function deliverWebhook(
-  db: DB,
-  rule: typeof automationRules.$inferSelect,
-  payload: Record<string, unknown>,
+// Backoff de retry de webhooks: após tentativas 1 e 2 (máx. 3 no total)
+const WEBHOOK_RETRY_DELAYS_MS = [5 * 60_000, 30 * 60_000];
+const WEBHOOK_MAX_ATTEMPTS = 3;
+
+async function attemptWebhook(
+  url: string,
+  secret: string | null | undefined,
+  body: string,
 ) {
-  const body = JSON.stringify(payload);
-  const signature = rule.webhookSecret
-    ? `sha256=${createHmac("sha256", rule.webhookSecret).update(body).digest("hex")}`
+  const signature = secret
+    ? `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`
     : undefined;
   const started = Date.now();
   let statusCode: number | null = null;
   let success = false;
   let error: string | null = null;
   try {
-    const res = await fetch(rule.webhookUrl!, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -45,16 +48,80 @@ async function deliverWebhook(
   } catch (err) {
     error = err instanceof Error ? err.message.slice(0, 280) : "falha de rede";
   }
+  return { statusCode, success, durationMs: Date.now() - started, error };
+}
+
+async function deliverWebhook(
+  db: DB,
+  rule: typeof automationRules.$inferSelect,
+  payload: Record<string, unknown>,
+) {
+  const result = await attemptWebhook(rule.webhookUrl!, rule.webhookSecret, JSON.stringify(payload));
   await db.insert(webhookDeliveries).values({
     tenantId: rule.tenantId,
     ruleId: rule.id,
     url: rule.webhookUrl!,
     trigger: String(payload.trigger),
-    statusCode,
-    success,
-    durationMs: Date.now() - started,
-    error,
+    payload,
+    statusCode: result.statusCode,
+    success: result.success,
+    durationMs: result.durationMs,
+    error: result.error,
+    nextRetryAt: result.success
+      ? null
+      : new Date(Date.now() + WEBHOOK_RETRY_DELAYS_MS[0]),
   });
+}
+
+/** Reenvia entregas falhadas cujo `nextRetryAt` já venceu (chamado pelo scheduler). */
+export async function retryFailedWebhooks(db: DB): Promise<number> {
+  const rows = await db
+    .select({ d: webhookDeliveries, rule: automationRules })
+    .from(webhookDeliveries)
+    .leftJoin(automationRules, eq(webhookDeliveries.ruleId, automationRules.id))
+    .where(
+      and(
+        eq(webhookDeliveries.success, false),
+        lt(webhookDeliveries.attempts, WEBHOOK_MAX_ATTEMPTS),
+        isNotNull(webhookDeliveries.nextRetryAt),
+        lte(webhookDeliveries.nextRetryAt, new Date()),
+        isNotNull(webhookDeliveries.payload),
+      ),
+    );
+
+  let retried = 0;
+  for (const { d, rule } of rows) {
+    // Sem regra (ou payload) já não é possível reenviar — termina retries
+    if (!rule?.webhookUrl || !d.payload) {
+      await db
+        .update(webhookDeliveries)
+        .set({ nextRetryAt: null, attempts: WEBHOOK_MAX_ATTEMPTS })
+        .where(eq(webhookDeliveries.id, d.id));
+      continue;
+    }
+    const result = await attemptWebhook(
+      rule.webhookUrl,
+      rule.webhookSecret,
+      JSON.stringify(d.payload),
+    );
+    const attempts = d.attempts + 1;
+    await db
+      .update(webhookDeliveries)
+      .set({
+        attempts,
+        statusCode: result.statusCode,
+        success: result.success,
+        durationMs: result.durationMs,
+        error: result.error,
+        nextRetryAt:
+          result.success || attempts >= WEBHOOK_MAX_ATTEMPTS
+            ? null
+            : new Date(Date.now() + WEBHOOK_RETRY_DELAYS_MS[attempts - 1]),
+      })
+      .where(eq(webhookDeliveries.id, d.id));
+    retried++;
+  }
+  return retried;
 }
 
 /**

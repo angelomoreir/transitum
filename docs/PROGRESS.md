@@ -347,7 +347,55 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
 
 ---
 
-## Próximas fases (aguarda autorização)
+## Fase 8 — Hardening, produção e documentação ✅ (2026-10-16)
 
-- Fase 8: testes globais, hardening de segurança, documentação final e
-  preparação para produção.
+### Implementado
+
+- **Scheduler embutido** (`lib/scheduler.ts`, `SCHEDULER_INTERVAL_MS` def. 1h,
+  desligado em testes): trial expirado → subscrição `past_due` + notificação;
+  fatura `open` vencida em conta `active` → `past_due` + notificação; retry
+  de webhooks falhados (backoff 5 min/30 min, máx. 3 tentativas via
+  `webhook_deliveries.attempts`/`nextRetryAt`/`payload` persistido).
+- **Chaves de API**: `expiresAt` opcional (schema, DTO, coluna, UI com input
+  de data); a `/api/v1` rejeita chaves expiradas e tem rate limit dedicado
+  (120/min).
+- **Storage S3/MinIO**: `S3Storage` com `@aws-sdk/client-s3` carregado
+  dinamicamente — ativado quando `S3_BUCKET` definido; path-style para
+  MinIO/compatíveis; driver local mantém-se por omissão.
+- **Produção**: `apps/api/Dockerfile` + `apps/web/Dockerfile` (multi-stage,
+  nginx com SPA fallback + proxy `/api`), docker-compose completo
+  (postgres+minio+bucket init+api+web), `tsx` movido para dependencies
+  (`npm start` funciona em `--omit=dev`), `docs/PRODUCTION.md` (envs,
+  RLS de exemplo, checklist go-live) e `docs/SECURITY.md` (postura completa).
+- **Fixes**: encoding/mojibake dos comentários do `schema.ts`; flake do
+  `operations.spec.ts` mitigado (timeout 120s — teste longo legítimo);
+  migração `0007`.
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **114/114 ✅** (6 novos: trial expirado, fatura vencida, chave expirada/futura, retry de webhook real, máx. tentativas) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + build Web | ✅ |
+| Playwright e2e | **8/8 ✅** |
+| npm audit | Produção limpa; dev-only remanescentes documentadas |
+
+### Limitações conhecidas (finais)
+
+- Scheduler embutido na API — para multi-instância extrair para worker/fila.
+- Webhooks com retry limitado (3 tentativas) — sem fila persistente.
+- RLS documentado mas não aplicado (exige propagar `app.tenant_id` por
+  transação — mudança pendente, validável só em Postgres real).
+- Sem scanning de uploads, bloqueio SSRF de webhooks, nem SMTP real.
+- `npm start` corre via tsx (sem build pass no container).
+
+---
+
+## Estado do projeto
+
+Fases 1–8 concluídas. A plataforma cobre: auth/multi-tenancy/RBAC, parceiros,
+encomendas, expedições e tracking, rotas e custos, armazéns e inventário,
+documentos e automatizações, comércio internacional, API pública e webhooks,
+subscrições e administração SaaS — com testes (114 API + 8 e2e), docs de
+arquitetura/segurança/produção e empacotamento Docker.

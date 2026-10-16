@@ -34,6 +34,7 @@ export function IntegrationsPage() {
   const [deliveries, setDeliveries] = useState<WebhookDeliveryDto[]>([]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [newSecret, setNewSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,7 +61,7 @@ export function IntegrationsPage() {
     try {
       const res = await api<{ key: ApiKeyDto; secret: string }>("/api/integrations/keys", {
         method: "POST",
-        body: { name },
+        body: expiresAt ? { name, expiresAt: new Date(expiresAt).toISOString() } : { name },
       });
       setNewSecret(res.secret);
       setCopied(false);
@@ -113,6 +114,7 @@ export function IntegrationsPage() {
                 if (!o) {
                   setNewSecret(null);
                   setName("");
+                  setExpiresAt("");
                 }
               }}
             >
@@ -147,6 +149,16 @@ export function IntegrationsPage() {
                       onChange={(e) => setName(e.target.value)}
                       placeholder="ERP, TMS externo…"
                     />
+                    <Label htmlFor="key-expires">{t("integrations.expiresAt")}</Label>
+                    <Input
+                      id="key-expires"
+                      type="date"
+                      value={expiresAt}
+                      onChange={(e) => setExpiresAt(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("integrations.expiresAtHint")}
+                    </p>
                   </div>
                 )}
                 <DialogFooter>
@@ -185,6 +197,9 @@ export function IntegrationsPage() {
                 <TableHead className="hidden md:table-cell">
                   {t("integrations.lastUsed")}
                 </TableHead>
+                <TableHead className="hidden lg:table-cell">
+                  {t("integrations.expires")}
+                </TableHead>
                 <TableHead>{t("automations.active")}</TableHead>
                 {canWrite && <TableHead className="w-12" />}
               </TableRow>
@@ -201,6 +216,11 @@ export function IntegrationsPage() {
                     {k.lastUsedAt
                       ? new Date(k.lastUsedAt).toLocaleString("pt-PT")
                       : t("integrations.never")}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    {k.expiresAt
+                      ? new Date(k.expiresAt).toLocaleDateString("pt-PT")
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     <Badge variant={k.active ? "success" : "secondary"}>

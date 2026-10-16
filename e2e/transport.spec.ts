@@ -4,6 +4,9 @@ const stamp = Date.now();
 const EMAIL = `e2e-transport-${stamp}@empresa.pt`;
 const PASSWORD = "Password123!";
 
+// Teste longo (fluxo completo com API real + PGlite) — margem extra
+test.setTimeout(120_000);
+
 test("tarifa → expedição planeada → rota com paragem → checkpoint + custo", async ({
   page,
 }) => {

@@ -33,6 +33,7 @@ export const integrationRoutes: FastifyPluginAsyncZod = async (app) => {
           prefix: r.k.prefix,
           active: r.k.active,
           lastUsedAt: r.k.lastUsedAt?.toISOString() ?? null,
+          expiresAt: r.k.expiresAt?.toISOString() ?? null,
           createdByName: r.creatorName ?? null,
           createdAt: r.k.createdAt.toISOString(),
         })),
@@ -73,6 +74,7 @@ export const integrationRoutes: FastifyPluginAsyncZod = async (app) => {
           name: req.body.name,
           prefix,
           keyHash,
+          expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
           createdBy: req.user.sub,
         })
         .returning();
@@ -92,6 +94,7 @@ export const integrationRoutes: FastifyPluginAsyncZod = async (app) => {
           prefix: row.prefix,
           active: row.active,
           lastUsedAt: null,
+          expiresAt: row.expiresAt?.toISOString() ?? null,
           createdByName: req.user.name,
           createdAt: row.createdAt.toISOString(),
         },

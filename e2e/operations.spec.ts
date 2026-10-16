@@ -4,6 +4,9 @@ const stamp = Date.now();
 const EMAIL = `e2e-ops-${stamp}@empresa.pt`;
 const PASSWORD = "Password123!";
 
+// Teste longo (fluxo operacional completo com API real + PGlite) — margem extra
+test.setTimeout(120_000);
+
 test("parceiro → encomenda → expedição → estados e timeline", async ({ page }) => {
   // Registo + login
   await page.goto("/register");

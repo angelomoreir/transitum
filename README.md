@@ -84,6 +84,11 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
   com emissão/pagamento manual, enforcement de limites e suspensão de tenants;
   administração da plataforma em `/api/admin` + página `/admin` (bootstrap via
   `PLATFORM_ADMIN_EMAILS`) e página `/billing` na app.
+- **Fase 8**: scheduler de subscrições (trial/fatura vencida → `past_due`),
+  retries de webhooks com backoff, expiração opcional de chaves API e rate
+  limit na `/api/v1`, driver de storage S3/MinIO, Dockerfiles + compose
+  completo, documentos de segurança (`docs/SECURITY.md`) e produção
+  (`docs/PRODUCTION.md`).
 
 ## Autenticação
 
@@ -91,4 +96,5 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
   e deteção de reutilização (revoga todas as sessões).
 - Passwords com scrypt (node:crypto), tokens de convite/reset com hash sha256.
 - Registo cria tenant + admin; login por email (globalmente único).
-- Ver `docs/ARCHITECTURE.md` para detalhes.
+- Ver `docs/ARCHITECTURE.md` para detalhes, `docs/SECURITY.md` para a postura
+  de segurança e `docs/PRODUCTION.md` para o guia de deploy.

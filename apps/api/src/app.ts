@@ -16,6 +16,7 @@ import { env } from "./env.js";
 import { createDb, runMigrations, type DB, type DbDriver } from "./db/client.js";
 import { ensurePlans } from "./lib/billing.js";
 import { AppError } from "./lib/errors.js";
+import { startScheduler } from "./lib/scheduler.js";
 import { createConsoleMailer, type Mailer } from "./lib/mailer.js";
 import { authPlugin } from "./plugins/auth.js";
 import { createStorage } from "./lib/storage.js";
@@ -152,6 +153,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(billingRoutes, { prefix: "/api" });
   await app.register(adminRoutes, { prefix: "/api/admin" });
   await app.register(miscRoutes, { prefix: "/api" });
+
+  startScheduler(handle.db, app.log);
 
   return app;
 }

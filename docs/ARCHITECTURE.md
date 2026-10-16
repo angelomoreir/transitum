@@ -123,6 +123,19 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
 - Enforcement de plano: `maxUsers` no convite de utilizadores e `maxApiKeys`
   na criação de chaves — ambos verificados contra a subscrição do tenant.
 
+### Modelo de dados (Fase 8 — hardening)
+
+- `api_keys.expiresAt` — expiração opcional verificada na auth da `/api/v1`
+  (que tem também rate limit dedicado, 120/min).
+- `webhook_deliveries.payload`/`attempts`/`nextRetryAt` — retries com backoff
+  (5 min, 30 min; máx. 3) executados pelo scheduler.
+- **Scheduler** (`lib/scheduler.ts`): `setInterval` embutido na API
+  (`SCHEDULER_INTERVAL_MS`), desligado em `NODE_ENV=test`; corre
+  `expireTrials` (trial→`past_due`), `markOverdueSubscriptions` (fatura
+  vencida→`past_due`) e `retryFailedWebhooks`, notificando os utilizadores.
+- **Storage**: `S3Storage` (`@aws-sdk/client-s3`, carregamento dinâmico) ativo
+  quando `S3_BUCKET` está definido; `STORAGE_DIR`/local por omissão.
+
 ## Autenticação e segurança
 
 - **Access token**: JWT 15min (`{sub, tid, role, name, email}`).

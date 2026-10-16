@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
 import type {
   FastifyPluginAsyncZod,
   ZodTypeProvider,
@@ -29,6 +29,9 @@ import { nextNumber } from "../lib/sequences.js";
  * API pública v1 — autenticação por chave de API (`x-api-key: bjk_...`)
  * ou Bearer JWT de utilizador. Âmbito: encomendas e expedições do tenant.
  */
+
+// Rate limit dedicado à API pública (por IP/chave)
+const V1_RATE_LIMIT = { max: 120, timeWindow: "1 minute" };
 
 const orderListResponse = z.object({
   items: z.array(orderDtoSchema),
@@ -97,8 +100,14 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
         const [row] = await app.db
           .select()
           .from(apiKeys)
-          .where(and(eq(apiKeys.keyHash, hashApiKey(key)), eq(apiKeys.active, true)));
-        if (!row) throw unauthorized("Chave de API inválida");
+          .where(
+            and(
+              eq(apiKeys.keyHash, hashApiKey(key)),
+              eq(apiKeys.active, true),
+              or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date())),
+            ),
+          );
+        if (!row) throw unauthorized("Chave de API inválida ou expirada");
         req.user = {
           sub: row.createdBy ?? row.id,
           tid: row.tenantId,
@@ -119,6 +128,7 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
     v1.get(
       "/orders",
       {
+        config: { rateLimit: V1_RATE_LIMIT },
         schema: {
           tags: ["Public API"],
           querystring: listOrdersQuerySchema,
@@ -162,6 +172,7 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
     v1.get(
       "/orders/:id",
       {
+        config: { rateLimit: V1_RATE_LIMIT },
         schema: {
           tags: ["Public API"],
           params: z.object({ id: z.string().uuid() }),
@@ -203,6 +214,7 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
     v1.post(
       "/orders",
       {
+        config: { rateLimit: V1_RATE_LIMIT },
         schema: {
           tags: ["Public API"],
           body: orderCreateSchema,
@@ -257,6 +269,7 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
     v1.get(
       "/shipments",
       {
+        config: { rateLimit: V1_RATE_LIMIT },
         schema: {
           tags: ["Public API"],
           querystring: listShipmentsQuerySchema,
@@ -324,6 +337,7 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
     v1.get(
       "/shipments/:id",
       {
+        config: { rateLimit: V1_RATE_LIMIT },
         schema: {
           tags: ["Public API"],
           params: z.object({ id: z.string().uuid() }),
