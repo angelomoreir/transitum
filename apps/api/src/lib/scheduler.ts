@@ -1,7 +1,13 @@
 import type { FastifyBaseLogger } from "fastify";
-import { and, eq, lt, lte } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, lte } from "drizzle-orm";
 import type { DB } from "../db/client.js";
-import { subscriptionInvoices, subscriptions } from "../db/schema.js";
+import {
+  partners,
+  shipmentEvents,
+  shipments,
+  subscriptionInvoices,
+  subscriptions,
+} from "../db/schema.js";
 import { env } from "../env.js";
 import { notifyUsersDirect } from "./notify.js";
 import { retryFailedWebhooks } from "./notify.js";
@@ -68,9 +74,52 @@ export async function markOverdueSubscriptions(db: DB): Promise<number> {
   return seen.size;
 }
 
+/**
+ * Expediações com entrega prevista ultrapassada → notificação ao tenant +
+ * evento `alert` na timeline (uma vez por expedição via `lateAlertedAt`).
+ */
+export async function alertLateShipments(db: DB): Promise<number> {
+  const late = await db
+    .select({
+      shipment: shipments,
+      customerName: partners.name,
+    })
+    .from(shipments)
+    .innerJoin(partners, eq(shipments.customerId, partners.id))
+    .where(
+      and(
+        inArray(shipments.status, ["planned", "in_transit"]),
+        isNull(shipments.lateAlertedAt),
+        lt(shipments.plannedDeliveryAt, new Date()),
+      ),
+    );
+  for (const { shipment: s, customerName } of late) {
+    await db
+      .update(shipments)
+      .set({ lateAlertedAt: new Date() })
+      .where(eq(shipments.id, s.id));
+    await db.insert(shipmentEvents).values({
+      tenantId: s.tenantId,
+      shipmentId: s.id,
+      type: "alert",
+      description: `Entrega em atraso — prevista para ${s.plannedDeliveryAt!.toLocaleString("pt-PT")}`,
+      occurredAt: new Date(),
+    });
+    await notifyUsersDirect(db, {
+      tenantId: s.tenantId,
+      type: "shipment.late",
+      title: `Expedição ${s.number} em atraso`,
+      body: `A entrega ao cliente ${customerName} estava prevista para ${s.plannedDeliveryAt!.toLocaleString("pt-PT")} e ainda não foi concluída.`,
+      link: `/shipments/${s.id}`,
+    });
+  }
+  return late.length;
+}
+
 export async function runSchedulerOnce(db: DB): Promise<void> {
   await expireTrials(db);
   await markOverdueSubscriptions(db);
+  await alertLateShipments(db);
   await retryFailedWebhooks(db);
 }
 

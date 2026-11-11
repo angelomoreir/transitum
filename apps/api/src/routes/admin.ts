@@ -6,7 +6,7 @@ import {
   adminTenantDtoSchema,
   changePlanSchema,
   subscriptionStatusSchema,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import {
   plans,
   platformAdmins,

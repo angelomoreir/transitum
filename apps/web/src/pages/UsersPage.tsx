@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, MoreHorizontal, UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import { inviteUserSchema, type UserDto, type Role } from "@blujay/shared";
+import { inviteUserSchema, type UserDto, type Role } from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
@@ -105,7 +105,7 @@ export function UsersPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("users.allRoles")}</SelectItem>
-            {(["admin", "manager", "operator", "viewer"] as const).map((r) => (
+            {(["admin", "manager", "operator", "viewer", "driver"] as const).map((r) => (
               <SelectItem key={r} value={r}>
                 {t(`users.roles.${r}`)}
               </SelectItem>
@@ -291,7 +291,7 @@ function InviteDialog({ onDone }: { onDone: () => Promise<void> }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(["manager", "operator", "viewer"] as const).map((r) => (
+                {(["manager", "operator", "viewer", "driver"] as const).map((r) => (
                   <SelectItem key={r} value={r}>
                     {t(`users.roles.${r}`)}
                   </SelectItem>

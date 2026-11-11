@@ -9,11 +9,13 @@ import {
   type CostType,
   type ShipmentDetailDto,
   type ShipmentStatus,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CustomsCard } from "@/components/CustomsCard";
 import { DocumentsCard } from "@/components/DocumentsCard";
+import { LeafletMap, type MapPoint } from "@/components/LeafletMap";
+import { ShipmentOpsCard } from "@/components/ShipmentOpsCard";
 import { SHIPMENT_STATUS_VARIANT } from "@/pages/ShipmentsPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -238,6 +240,75 @@ export function ShipmentDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {(shipment.pickupCoords || shipment.deliveryCoords || shipment.lastPosition) && (
+        <LeafletMap
+          points={(() => {
+            const pts: MapPoint[] = [];
+            if (shipment.pickupCoords) {
+              pts.push({ coords: shipment.pickupCoords, label: t("shipments.pickup"), kind: "pickup" });
+            }
+            if (shipment.lastPosition) {
+              pts.push({ coords: shipment.lastPosition, label: t("ops.lastPosition"), kind: "position" });
+            }
+            if (shipment.deliveryCoords) {
+              pts.push({ coords: shipment.deliveryCoords, label: t("shipments.delivery"), kind: "delivery" });
+            }
+            return pts;
+          })()}
+        />
+      )}
+
+      {shipment.lines.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("orders.lines")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border text-sm">
+              {shipment.lines.map((l) => (
+                <li key={l.id} className="flex items-center gap-3 py-2">
+                  <span className="w-8 text-muted-foreground">{l.lineNo}.</span>
+                  {l.sku && <span className="font-mono text-xs text-muted-foreground">{l.sku}</span>}
+                  <span className="flex-1">{l.description}</span>
+                  <span>
+                    {l.quantity} {l.unit}
+                  </span>
+                  {l.weightKg != null && (
+                    <span className="text-xs text-muted-foreground">{l.weightKg} kg</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      <ShipmentOpsCard shipment={shipment} onChange={load} />
+
+      {shipment.proofs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("ops.proofs")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border text-sm">
+              {shipment.proofs.map((p) => (
+                <li key={p.id} className="py-2">
+                  <p className="font-medium">{p.recipientName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(`routes.stopTypes.${p.stopType}`)} ·{" "}
+                    {new Date(p.capturedAt).toLocaleString("pt-PT")}
+                    {p.capturedByName ? ` · ${p.capturedByName}` : ""}
+                    {p.signatureDocId ? ` · ${t("ops.signed")}` : ""}
+                  </p>
+                  {p.note && <p className="text-xs">{p.note}</p>}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

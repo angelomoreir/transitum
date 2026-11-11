@@ -12,6 +12,7 @@ export const userDtoSchema = z.object({
   role: roleSchema,
   status: userStatusSchema,
   isPlatformAdmin: z.boolean().default(false),
+  totpEnabled: z.boolean().default(false),
   lastLoginAt: z.string().nullable(),
   createdAt: z.string(),
 });
@@ -32,6 +33,16 @@ export const authResponseSchema = z.object({
   tenant: tenantDtoSchema,
 });
 export type AuthResponse = z.infer<typeof authResponseSchema>;
+
+/** Resposta do login quando o utilizador tem MFA/TOTP ativo. */
+export const mfaRequiredSchema = z.object({
+  mfaRequired: z.literal(true),
+  mfaToken: z.string(),
+});
+export type MfaRequired = z.infer<typeof mfaRequiredSchema>;
+
+export const loginResponseSchema = z.union([authResponseSchema, mfaRequiredSchema]);
+export type LoginResponse = z.infer<typeof loginResponseSchema>;
 
 export const apiErrorSchema = z.object({
   error: z.object({

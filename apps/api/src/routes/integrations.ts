@@ -1,16 +1,20 @@
+import { randomBytes } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
   apiKeyCreateSchema,
   apiKeyDtoSchema,
+  inboundChannelCreateSchema,
+  inboundChannelDtoSchema,
   webhookDeliveryDtoSchema,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
-import { apiKeys, users, webhookDeliveries } from "../db/schema.js";
+import { apiKeys, inboundChannels, users, webhookDeliveries } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { generateApiKey } from "../lib/apikeys.js";
 import { getSubscriptionWithPlan } from "../lib/billing.js";
 import { forbidden, notFound } from "../lib/errors.js";
+import { encryptSecret } from "../lib/secrets.js";
 
 export const integrationRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -154,6 +158,101 @@ export const integrationRoutes: FastifyPluginAsyncZod = async (app) => {
           createdAt: d.createdAt.toISOString(),
         })),
       };
+    },
+  );
+
+  // ── Canais de entrada (webhooks Shopify/WooCommerce/genérico) ─────────────
+
+  const channelDto = (c: typeof inboundChannels.$inferSelect) => ({
+    id: c.id,
+    name: c.name,
+    source: c.source,
+    token: c.token,
+    url: `/api/inbound/${c.token}`,
+    active: c.active,
+    lastReceivedAt: c.lastReceivedAt?.toISOString() ?? null,
+    createdAt: c.createdAt.toISOString(),
+  });
+
+  app.get(
+    "/inbound-channels",
+    {
+      preHandler: app.requirePermission("integrations:read"),
+      schema: {
+        response: { 200: z.object({ items: z.array(inboundChannelDtoSchema) }) },
+      },
+    },
+    async (req) => {
+      const rows = await app.db
+        .select()
+        .from(inboundChannels)
+        .where(eq(inboundChannels.tenantId, req.user.tid))
+        .orderBy(desc(inboundChannels.createdAt));
+      return { items: rows.map(channelDto) };
+    },
+  );
+
+  app.post(
+    "/inbound-channels",
+    {
+      preHandler: app.requirePermission("integrations:write"),
+      schema: {
+        body: inboundChannelCreateSchema,
+        response: { 201: z.object({ channel: inboundChannelDtoSchema }) },
+      },
+    },
+    async (req, reply) => {
+      const [c] = await app.db
+        .insert(inboundChannels)
+        .values({
+          tenantId: req.user.tid,
+          name: req.body.name,
+          source: req.body.source,
+          token: randomBytes(24).toString("base64url"),
+          secret: encryptSecret(req.body.secret),
+        })
+        .returning();
+      await audit(app.db, {
+        tenantId: req.user.tid,
+        actorId: req.user.sub,
+        action: "integrations.channel_created",
+        entity: "inbound_channel",
+        entityId: c.id,
+        metadata: { name: c.name, source: c.source },
+        ip: req.ip,
+      });
+      return reply.code(201).send({ channel: channelDto(c) });
+    },
+  );
+
+  /** Ativar/desativar ou renomear um canal de entrada. */
+  app.patch(
+    "/inbound-channels/:id",
+    {
+      preHandler: app.requirePermission("integrations:write"),
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          name: z.string().trim().min(2).max(120).optional(),
+          active: z.boolean().optional(),
+        }),
+        response: { 200: z.object({ channel: inboundChannelDtoSchema }) },
+      },
+    },
+    async (req) => {
+      const [c] = await app.db
+        .select()
+        .from(inboundChannels)
+        .where(
+          and(eq(inboundChannels.id, req.params.id), eq(inboundChannels.tenantId, req.user.tid)),
+        );
+      if (!c) throw notFound("Canal não encontrado");
+      const [updated] = await app.db
+        .update(inboundChannels)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(inboundChannels.id, c.id))
+        .returning();
+      return { channel: channelDto(updated) };
     },
   );
 };

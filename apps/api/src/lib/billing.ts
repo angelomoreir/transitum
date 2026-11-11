@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { PlanDto, SaasInvoiceDto, SubscriptionDto } from "@blujay/shared";
+import type { PlanDto, SaasInvoiceDto, SubscriptionDto } from "@transitum/shared";
 import type { DB } from "../db/client.js";
 import {
   platformAdmins,

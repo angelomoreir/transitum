@@ -7,7 +7,7 @@ import {
   PO_STATUSES,
   type PoStatus,
   type PurchaseOrderDto,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

@@ -8,7 +8,7 @@ import {
   type OrderDto,
   type PartnerDto,
   type ShipmentDetailDto,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,6 +51,7 @@ export function ShipmentNewPage() {
   const [totalWeightKg, setTotalWeightKg] = useState("");
   const [packages, setPackages] = useState("");
   const [notes, setNotes] = useState("");
+  const [recipient, setRecipient] = useState({ name: "", email: "", phone: "", notify: true });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -94,6 +95,10 @@ export function ShipmentNewPage() {
       totalWeightKg: totalWeightKg ? Number(totalWeightKg) : undefined,
       packages: packages ? Number(packages) : undefined,
       notes: notes || undefined,
+      recipientName: recipient.name || undefined,
+      recipientEmail: recipient.email || undefined,
+      recipientPhone: recipient.phone || undefined,
+      notifyRecipient: recipient.notify,
     };
     const parsed = shipmentCreateSchema.safeParse(payload);
     if (!parsed.success) {
@@ -239,6 +244,53 @@ export function ShipmentNewPage() {
 
         {addressFields("pickup", pickup, setPickup, t("shipments.pickup"))}
         {addressFields("delivery", delivery, setDelivery, t("shipments.delivery"))}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("shipments.recipient")}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="s-rname">{t("shipments.recipientName")}</Label>
+              <Input
+                id="s-rname"
+                value={recipient.name}
+                onChange={(e) => setRecipient((r) => ({ ...r, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="s-rphone">{t("shipments.recipientPhone")}</Label>
+              <Input
+                id="s-rphone"
+                value={recipient.phone}
+                onChange={(e) => setRecipient((r) => ({ ...r, phone: e.target.value }))}
+                placeholder="+351…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="s-remail">{t("shipments.recipientEmail")}</Label>
+              <Input
+                id="s-remail"
+                type="email"
+                value={recipient.email}
+                onChange={(e) => setRecipient((r) => ({ ...r, email: e.target.value }))}
+              />
+            </div>
+            <div className="flex items-end gap-2 pb-1">
+              <input
+                id="s-rnotify"
+                type="checkbox"
+                className="h-4 w-4"
+                checked={recipient.notify}
+                onChange={(e) => setRecipient((r) => ({ ...r, notify: e.target.checked }))}
+              />
+              <Label htmlFor="s-rnotify">{t("shipments.notifyRecipient")}</Label>
+            </div>
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              {t("shipments.notifyHint")}
+            </p>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

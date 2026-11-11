@@ -7,7 +7,7 @@ import {
   rateCreateSchema,
   type PartnerDto,
   type RateDto,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

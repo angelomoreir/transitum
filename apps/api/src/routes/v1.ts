@@ -1,29 +1,39 @@
-import { and, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import type {
   FastifyPluginAsyncZod,
   ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import {
+  carrierEventSchema,
+  inboundOrderResponseSchema,
+  inboundOrderSchema,
   listOrdersQuerySchema,
   listShipmentsQuerySchema,
+  listStockQuerySchema,
   orderCreateSchema,
   orderDetailDtoSchema,
   orderDtoSchema,
   shipmentDtoSchema,
-  type CustomsStatus,
-  type Incoterm,
-} from "@blujay/shared";
+  stockLevelDtoSchema,
+} from "@transitum/shared";
 import { z } from "zod";
 import {
   apiKeys,
+  items,
   orderLines,
   orders,
   partners,
+  shipmentEvents,
   shipments,
+  stockLevels,
+  warehouses,
 } from "../db/schema.js";
 import { hashApiKey } from "../lib/apikeys.js";
 import { badRequest, notFound, unauthorized } from "../lib/errors.js";
+import { createInboundOrder } from "../lib/inbound.js";
 import { nextNumber } from "../lib/sequences.js";
+import { orderLineToDto, orderToDto, orderTotal, shipmentToDto } from "../lib/dto.js";
+import { changeShipmentStatus } from "../lib/shipment-flow.js";
 
 /**
  * API pública v1 — autenticação por chave de API (`x-api-key: bjk_...`)
@@ -40,55 +50,8 @@ const orderListResponse = z.object({
   pageSize: z.number(),
 });
 
-const orderDto = (o: typeof orders.$inferSelect, customerName: string | null) => ({
-  id: o.id,
-  tenantId: o.tenantId,
-  number: o.number,
-  status: o.status,
-  customerId: o.customerId,
-  customerName: customerName ?? "",
-  requestedDate: o.requestedDate ?? null,
-  notes: o.notes ?? null,
-  deliveryLine1: o.deliveryLine1 ?? null,
-  deliveryCity: o.deliveryCity ?? null,
-  deliveryPostalCode: o.deliveryPostalCode ?? null,
-  deliveryCountry: o.deliveryCountry ?? null,
-  createdAt: o.createdAt.toISOString(),
-});
-
-const shipmentDto = (s: typeof shipments.$inferSelect, names: { customer?: string | null; carrier?: string | null; order?: string | null } = {}) => ({
-  id: s.id,
-  tenantId: s.tenantId,
-  number: s.number,
-  status: s.status,
-  customerId: s.customerId,
-  customerName: names.customer ?? "",
-  carrierId: s.carrierId ?? null,
-  carrierName: names.carrier ?? null,
-  orderId: s.orderId ?? null,
-  orderNumber: names.order ?? null,
-  pickupAddress: {
-    line1: s.pickupLine1,
-    city: s.pickupCity,
-    postalCode: s.pickupPostalCode,
-    country: s.pickupCountry,
-  },
-  deliveryAddress: {
-    line1: s.deliveryLine1,
-    city: s.deliveryCity,
-    postalCode: s.deliveryPostalCode,
-    country: s.deliveryCountry,
-  },
-  plannedPickupAt: s.plannedPickupAt?.toISOString() ?? null,
-  plannedDeliveryAt: s.plannedDeliveryAt?.toISOString() ?? null,
-  deliveredAt: s.deliveredAt?.toISOString() ?? null,
-  totalWeightKg: s.totalWeightKg ?? null,
-  packages: s.packages ?? null,
-  incoterm: (s.incoterm as Incoterm | null) ?? null,
-  customsStatus: s.customsStatus as CustomsStatus,
-  notes: s.notes ?? null,
-  createdAt: s.createdAt.toISOString(),
-});
+const orderDto = (o: typeof orders.$inferSelect, customerName: string | null, warehouseName: string | null = null) =>
+  orderToDto(o, customerName ?? "", warehouseName);
 
 export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
   // Auth: x-api-key (tenant da chave) ou Bearer JWT normal
@@ -191,20 +154,23 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(orderLines)
           .where(eq(orderLines.orderId, row.order.id))
           .orderBy(orderLines.lineNo);
+        const itemRows = lines.length
+          ? await app.db
+              .select({ id: items.id, sku: items.sku, unit: items.unit })
+              .from(items)
+              .where(inArray(items.id, lines.map((l) => l.itemId).filter((v): v is string => !!v)))
+          : [];
+        const itemMap = new Map(itemRows.map((i) => [i.id, i]));
         const linked = await app.db
           .select({ id: shipments.id, number: shipments.number, status: shipments.status })
           .from(shipments)
           .where(eq(shipments.orderId, row.order.id));
+        const dtos = lines.map((l) => orderLineToDto(l, itemMap.get(l.itemId ?? "") ?? null));
         return {
           order: {
             ...orderDto(row.order, row.customerName),
-            lines: lines.map((l) => ({
-              id: l.id,
-              lineNo: l.lineNo,
-              description: l.description,
-              quantity: l.quantity,
-              weightKg: l.weightKg ?? null,
-            })),
+            lines: dtos,
+            totalValue: orderTotal(dtos),
             shipments: linked,
           },
         };
@@ -244,6 +210,7 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
             tenantId: req.user.tid,
             number,
             customerId: body.customerId,
+            warehouseId: body.warehouseId ?? null,
             requestedDate: body.requestedDate || null,
             notes: body.notes ?? null,
             deliveryLine1: body.deliveryLine1 ?? null,
@@ -257,9 +224,11 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
             tenantId: req.user.tid,
             orderId: order.id,
             lineNo: i + 1,
-            description: l.description,
+            itemId: l.itemId ?? null,
+            description: l.description ?? "",
             quantity: l.quantity,
             weightKg: l.weightKg ?? null,
+            unitPrice: l.unitPrice ?? null,
           })),
         );
         return reply.code(201).send({ order: orderDto(order, customer.name) });
@@ -321,10 +290,10 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
         const orderMap = new Map(orderRows.map((o) => [o.id, o.number]));
         return {
           items: items.map((s) =>
-            shipmentDto(s, {
-              customer: names.get(s.customerId),
-              carrier: s.carrierId ? names.get(s.carrierId) : null,
-              order: s.orderId ? orderMap.get(s.orderId) : null,
+            shipmentToDto(s, {
+              customerName: names.get(s.customerId),
+              carrierName: s.carrierId ? names.get(s.carrierId) : null,
+              orderNumber: s.orderId ? orderMap.get(s.orderId) : null,
             }),
           ),
           total: count,
@@ -367,12 +336,176 @@ export const publicApiRoutes: FastifyPluginAsyncZod = async (app) => {
               .where(eq(orders.id, s.orderId))
           : [null];
         return {
-          shipment: shipmentDto(s, {
-            customer: customer?.name,
-            carrier: carrier?.name ?? null,
-            order: order?.number ?? null,
+          shipment: shipmentToDto(s, {
+            customerName: customer?.name,
+            carrierName: carrier?.name ?? null,
+            orderNumber: order?.number ?? null,
           }),
         };
+      },
+    );
+
+    /**
+     * Push de eventos de tracking por transportadora/agregador — localiza a
+     * expedição pelo nº de tracking e transita o estado quando aplicável.
+     */
+    /**
+     * Intake EDI/e-commerce — encomenda criada a partir de referências externas.
+     * Idempotente por `externalRef`; resolve/cria o cliente por NIF ou nome e
+     * os artigos por SKU (SKU desconhecido fica como linha de texto).
+     */
+    v1.post(
+      "/inbound-orders",
+      {
+        config: { rateLimit: V1_RATE_LIMIT },
+        schema: {
+          tags: ["Public API"],
+          body: inboundOrderSchema,
+          response: {
+            200: inboundOrderResponseSchema,
+            201: inboundOrderResponseSchema,
+          },
+        },
+      },
+      async (req, reply) => {
+        const body = req.body;
+
+        // Idempotência: mesma externalRef → devolve a encomenda existente
+        const [existing] = await app.db
+          .select()
+          .from(orders)
+          .where(
+            and(eq(orders.tenantId, req.user.tid), eq(orders.externalRef, body.externalRef)),
+          );
+        if (existing) {
+          return reply.code(200).send({
+            order: {
+              id: existing.id,
+              number: existing.number,
+              status: existing.status,
+              externalRef: existing.externalRef ?? null,
+            },
+            duplicate: true,
+          });
+        }
+
+        const order = await createInboundOrder(app.db, req.user.tid, body, req.user.sub);
+        return reply.code(201).send({
+          order: {
+            id: order.id,
+            number: order.number,
+            status: order.status,
+            externalRef: order.externalRef ?? null,
+          },
+          duplicate: false,
+        });
+      },
+    );
+
+    /** Níveis de stock por armazém/artigo (consulta para integrações). */
+    v1.get(
+      "/stock",
+      {
+        config: { rateLimit: V1_RATE_LIMIT },
+        schema: {
+          tags: ["Public API"],
+          querystring: listStockQuerySchema,
+          response: {
+            200: z.object({
+              items: z.array(stockLevelDtoSchema),
+              total: z.number(),
+              page: z.number(),
+              pageSize: z.number(),
+            }),
+          },
+        },
+      },
+      async (req) => {
+        const { page, pageSize, warehouseId, itemId, q } = req.query;
+        const conditions = [eq(stockLevels.tenantId, req.user.tid)];
+        if (warehouseId) conditions.push(eq(stockLevels.warehouseId, warehouseId));
+        if (itemId) conditions.push(eq(stockLevels.itemId, itemId));
+        if (q) {
+          const pattern = `%${q}%`;
+          conditions.push(or(ilike(items.sku, pattern), ilike(items.name, pattern))!);
+        }
+        const where = and(...conditions);
+        const [rows, [{ count }]] = await Promise.all([
+          app.db
+            .select({
+              level: stockLevels,
+              wh: { code: warehouses.code, name: warehouses.name },
+              item: { sku: items.sku, name: items.name, unit: items.unit },
+            })
+            .from(stockLevels)
+            .innerJoin(warehouses, eq(stockLevels.warehouseId, warehouses.id))
+            .innerJoin(items, eq(stockLevels.itemId, items.id))
+            .where(where)
+            .orderBy(items.sku, warehouses.code)
+            .limit(pageSize)
+            .offset((page - 1) * pageSize),
+          app.db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(stockLevels)
+            .innerJoin(items, eq(stockLevels.itemId, items.id))
+            .where(where),
+        ]);
+        return {
+          items: rows.map((r) => ({
+            warehouseId: r.level.warehouseId,
+            warehouseCode: r.wh.code,
+            warehouseName: r.wh.name,
+            itemId: r.level.itemId,
+            sku: r.item.sku,
+            itemName: r.item.name,
+            unit: r.item.unit,
+            onHand: r.level.onHand,
+            reserved: r.level.reserved,
+            reorderPoint: r.level.reorderPoint ?? null,
+          })),
+          total: count,
+          page,
+          pageSize,
+        };
+      },
+    );
+
+    v1.post(
+      "/carrier-events",
+      {
+        config: { rateLimit: V1_RATE_LIMIT },
+        schema: {
+          tags: ["Public API"],
+          body: carrierEventSchema,
+          response: { 200: z.object({ shipment: shipmentDtoSchema, matched: z.literal(true) }) },
+        },
+      },
+      async (req) => {
+        const e = req.body;
+        const [s] = await app.db
+          .select()
+          .from(shipments)
+          .where(and(eq(shipments.tenantId, req.user.tid), eq(shipments.trackingNumber, e.trackingNumber)));
+        if (!s) throw notFound("Nenhuma expedição com este número de tracking");
+
+        await app.db.insert(shipmentEvents).values({
+          tenantId: req.user.tid,
+          shipmentId: s.id,
+          type: "carrier",
+          description: e.description,
+          location: e.location ?? null,
+          occurredAt: e.occurredAt ? new Date(e.occurredAt) : new Date(),
+          createdBy: req.user.sub,
+        });
+
+        const act = { tenantId: req.user.tid, userId: req.user.sub, name: req.user.name };
+        let current = s;
+        if (e.status === "delivered" && s.status === "in_transit") {
+          current = (await changeShipmentStatus(app, act, s, "delivered", { source: "transportadora" })).shipment;
+        } else if (e.status === "in_transit" && s.status === "planned") {
+          current = (await changeShipmentStatus(app, act, s, "in_transit", { source: "transportadora" })).shipment;
+        }
+        return { shipment: shipmentToDto(current), matched: true as const };
       },
     );
   });

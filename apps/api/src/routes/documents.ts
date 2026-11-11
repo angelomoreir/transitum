@@ -5,7 +5,7 @@ import {
   documentCreateSchema,
   documentDtoSchema,
   listDocumentsQuerySchema,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
 import {
   documents,

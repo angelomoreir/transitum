@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { ROUTE_STATUSES, type RouteDto, type RouteStatus } from "@blujay/shared";
+import { ROUTE_STATUSES, type RouteDto, type RouteStatus } from "@transitum/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

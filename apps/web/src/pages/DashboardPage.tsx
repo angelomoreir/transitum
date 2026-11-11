@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Activity, Boxes, CheckCircle2, Clock, Package, Route as RouteIcon, ShoppingCart, Truck, UserCheck, Users } from "lucide-react";
-import type { Stats } from "@blujay/shared";
+import type { Stats } from "@transitum/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

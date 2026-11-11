@@ -10,7 +10,7 @@ export PLATFORM_ADMIN_EMAILS=admin@empresa.com
 docker compose up -d --build
 ```
 
-Sobe Postgres, MinIO (+bucket `blujay-documents`), API (`:3001`) e web
+Sobe Postgres, MinIO (+bucket `transitum-documents`), API (`:3001`) e web
 (`:8080`). Migrações e seed de planos correm no arranque da API.
 
 ## Variáveis de ambiente obrigatórias

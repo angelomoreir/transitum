@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
@@ -5,12 +6,34 @@ import {
   partnerCreateSchema,
   partnerDtoSchema,
   partnerUpdateSchema,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
 import { partners } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
+import { parseCsv } from "../lib/csv.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { nextNumber } from "../lib/sequences.js";
+
+const MAX_IMPORT_ROWS = 500;
+
+// Aceita cabeçalhos em inglês ou português
+const PARTNER_HEADERS: Record<string, string> = {
+  types: "types", tipo: "types", tipos: "types",
+  name: "name", nome: "name",
+  taxid: "taxId", nif: "taxId",
+  email: "email",
+  phone: "phone", telefone: "phone",
+  addressline1: "addressLine1", morada: "addressLine1", endereco: "addressLine1",
+  city: "city", cidade: "city", localidade: "city",
+  postalcode: "postalCode", cp: "postalCode", codigopostal: "postalCode", "código postal": "postalCode",
+  country: "country", pais: "country", "país": "country",
+  notes: "notes", notas: "notes",
+};
+const TYPE_ALIASES: Record<string, string> = {
+  customer: "customer", cliente: "customer",
+  supplier: "supplier", fornecedor: "supplier",
+  carrier: "carrier", transportadora: "carrier",
+};
 
 const listResponse = z.object({
   items: z.array(partnerDtoSchema),
@@ -129,6 +152,79 @@ export const partnerRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  // Importação em massa CSV (`;` ou `,`). Linhas inválidas são saltadas e
+  // reportadas por número de linha — as válidas são criadas.
+  app.post(
+    "/import",
+    {
+      preHandler: app.requirePermission("partners:write"),
+      schema: {
+        body: z.object({ csv: z.string().min(1).max(1_000_000) }),
+        response: {
+          200: z.object({
+            imported: z.number(),
+            errors: z.array(z.object({ row: z.number(), message: z.string() })),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const rows = parseCsv(req.body.csv);
+      if (rows.length === 0) throw badRequest("CSV vazio ou sem cabeçalho");
+      if (rows.length > MAX_IMPORT_ROWS) {
+        throw badRequest(`Máximo de ${MAX_IMPORT_ROWS} linhas por importação`);
+      }
+      const errors: { row: number; message: string }[] = [];
+      let imported = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const raw: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rows[i])) {
+          const key = PARTNER_HEADERS[k];
+          if (key) raw[key] = v;
+        }
+        const parsed = partnerCreateSchema.safeParse({
+          ...raw,
+          types: (raw.types ?? "")
+            .split(/[|,]/)
+            .map((t) => TYPE_ALIASES[t.trim().toLowerCase()] ?? t.trim())
+            .filter(Boolean),
+        });
+        if (!parsed.success) {
+          errors.push({
+            row: i + 2,
+            message: parsed.error.issues.map((e) => e.message).join("; "),
+          });
+          continue;
+        }
+        const code = await nextNumber(app.db, req.user.tid, `partner:${parsed.data.types[0]}`);
+        const [partner] = await app.db
+          .insert(partners)
+          .values({ ...parsed.data, tenantId: req.user.tid, code })
+          .returning();
+        await audit(app.db, {
+          tenantId: req.user.tid,
+          actorId: req.user.sub,
+          action: "partners.created",
+          entity: "partner",
+          entityId: partner.id,
+          metadata: { name: partner.name, types: partner.types, import: true },
+          ip: req.ip,
+        });
+        imported++;
+      }
+      await audit(app.db, {
+        tenantId: req.user.tid,
+        actorId: req.user.sub,
+        action: "partners.imported",
+        entity: "partner",
+        entityId: req.user.tid,
+        metadata: { imported, failed: errors.length },
+        ip: req.ip,
+      });
+      return { imported, errors };
+    },
+  );
+
   app.patch(
     "/:id",
     {
@@ -196,6 +292,69 @@ export const partnerRoutes: FastifyPluginAsyncZod = async (app) => {
         ip: req.ip,
       });
       return { partner: toDto(updated) };
+    },
+  );
+
+  /**
+   * Gera (ou roda) o link do portal do cliente — token opaco de acesso
+   * público às encomendas e expedições do parceiro.
+   */
+  app.post(
+    "/:id/portal-link",
+    {
+      preHandler: app.requirePermission("partners:write"),
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        response: { 200: z.object({ portalToken: z.string(), portalUrl: z.string() }) },
+      },
+    },
+    async (req) => {
+      const [target] = await app.db
+        .select()
+        .from(partners)
+        .where(and(eq(partners.id, req.params.id), eq(partners.tenantId, req.user.tid)));
+      if (!target) throw notFound("Parceiro não encontrado");
+      if (!target.types.includes("customer")) {
+        throw badRequest("O portal só está disponível para clientes");
+      }
+      const portalToken = randomBytes(24).toString("base64url");
+      await app.db
+        .update(partners)
+        .set({ portalToken, updatedAt: new Date() })
+        .where(eq(partners.id, target.id));
+      await audit(app.db, {
+        tenantId: req.user.tid,
+        actorId: req.user.sub,
+        action: "partners.portal_link_created",
+        entity: "partner",
+        entityId: target.id,
+        ip: req.ip,
+      });
+      return { portalToken, portalUrl: `/portal/${portalToken}` };
+    },
+  );
+
+  /** Revoga o acesso ao portal do cliente. */
+  app.delete(
+    "/:id/portal-link",
+    {
+      preHandler: app.requirePermission("partners:write"),
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        response: { 200: z.object({ ok: z.literal(true) }) },
+      },
+    },
+    async (req) => {
+      const [target] = await app.db
+        .select()
+        .from(partners)
+        .where(and(eq(partners.id, req.params.id), eq(partners.tenantId, req.user.tid)));
+      if (!target) throw notFound("Parceiro não encontrado");
+      await app.db
+        .update(partners)
+        .set({ portalToken: null, updatedAt: new Date() })
+        .where(eq(partners.id, target.id));
+      return { ok: true as const };
     },
   );
 };

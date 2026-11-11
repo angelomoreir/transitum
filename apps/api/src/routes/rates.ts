@@ -5,7 +5,7 @@ import {
   rateCreateSchema,
   rateDtoSchema,
   rateUpdateSchema,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
 import { carrierRates, partners } from "../db/schema.js";
 import { audit } from "../lib/audit.js";

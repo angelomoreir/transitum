@@ -190,7 +190,7 @@ describe("webhooks", () => {
       req.on("end", () => {
         received.push({
           body,
-          signature: req.headers["x-blujay-signature"] as string | undefined,
+          signature: req.headers["x-transitum-signature"] as string | undefined,
         });
         res.writeHead(200).end();
       });

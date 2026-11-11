@@ -9,21 +9,27 @@ import {
   purchaseOrderDetailDtoSchema,
   purchaseOrderDtoSchema,
   type PoStatus,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
 import {
   items,
   partners,
   purchaseOrderLines,
   purchaseOrders,
-  stockLevels,
-  stockMovements,
+  warehouseLocations,
   warehouses,
 } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { notifyTenant } from "../lib/notify.js";
 import { nextNumber } from "../lib/sequences.js";
+import {
+  applyBinDelta,
+  applyLotDelta,
+  applyStockDelta,
+  recordMovement,
+  registerSerials,
+} from "../lib/stock.js";
 
 type PoRow = typeof purchaseOrders.$inferSelect;
 type LineRow = typeof purchaseOrderLines.$inferSelect;
@@ -379,30 +385,72 @@ export const purchaseRoutes: FastifyPluginAsyncZod = async (app) => {
       // Aplicar receção
       for (const r of req.body.lines) {
         const l = lineMap.get(r.lineId)!;
+        const serials = r.serials?.map((s) => s.trim()).filter(Boolean) ?? [];
+        if (l.item.serialized) {
+          if (new Set(serials).size !== r.quantity || serials.length !== r.quantity) {
+            throw badRequest(
+              `Artigo serializado (${l.item.sku}): indique ${r.quantity} número(s) de série únicos`,
+            );
+          }
+        } else if (serials.length) {
+          throw badRequest(`${l.item.sku} não é gerido por número de série`);
+        }
+        // Bin de putaway — tem de pertencer ao armazém da compra
+        let locCode: string | null = null;
+        if (r.locationId) {
+          const [loc] = await app.db
+            .select({ id: warehouseLocations.id, code: warehouseLocations.code })
+            .from(warehouseLocations)
+            .where(
+              and(
+                eq(warehouseLocations.id, r.locationId),
+                eq(warehouseLocations.tenantId, req.user.tid),
+                eq(warehouseLocations.warehouseId, row.po.warehouseId),
+                eq(warehouseLocations.active, true),
+              ),
+            );
+          if (!loc) throw badRequest("Localização não encontrada neste armazém");
+          locCode = loc.code;
+        }
         await app.db
           .update(purchaseOrderLines)
           .set({ receivedQty: sql`${purchaseOrderLines.receivedQty} + ${r.quantity}` })
           .where(eq(purchaseOrderLines.id, l.line.id));
-        await app.db
-          .insert(stockLevels)
-          .values({
-            tenantId: req.user.tid,
-            warehouseId: row.po.warehouseId,
-            itemId: l.line.itemId,
-            onHand: r.quantity,
-          })
-          .onConflictDoUpdate({
-            target: [stockLevels.tenantId, stockLevels.warehouseId, stockLevels.itemId],
-            set: { onHand: sql`${stockLevels.onHand} + ${r.quantity}`, updatedAt: new Date() },
-          });
-        await app.db.insert(stockMovements).values({
+        await applyStockDelta(app.db, req.user.tid, row.po.warehouseId, l.line.itemId, r.quantity);
+        if (r.lotCode) {
+          await applyLotDelta(
+            app.db,
+            req.user.tid,
+            row.po.warehouseId,
+            l.line.itemId,
+            r.lotCode,
+            r.quantity,
+            r.lotExpiresAt ?? null,
+          );
+        }
+        if (r.locationId) {
+          await applyBinDelta(
+            app.db,
+            req.user.tid,
+            row.po.warehouseId,
+            r.locationId,
+            l.line.itemId,
+            r.quantity,
+          );
+        }
+        if (l.item.serialized) {
+          await registerSerials(app.db, req.user.tid, row.po.warehouseId, l.line.itemId, serials);
+        }
+        await recordMovement(app.db, {
           tenantId: req.user.tid,
           type: "in",
           itemId: l.line.itemId,
           quantity: r.quantity,
           warehouseId: row.po.warehouseId,
           reference: row.po.number,
-          note: `Receção ${row.po.number} — linha ${l.line.lineNo}`,
+          note: `Receção ${row.po.number} — linha ${l.line.lineNo}${locCode ? ` — putaway ${locCode}` : ""}${serials.length ? ` — séries: ${serials.join(", ")}` : ""}`,
+          lotCode: r.lotCode ?? null,
+          locationId: r.locationId ?? null,
           createdBy: req.user.sub,
         });
       }

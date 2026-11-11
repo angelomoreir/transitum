@@ -98,7 +98,7 @@ test("tarifa → expedição planeada → rota com paragem → checkpoint + cust
   await page.getByTestId("stop-item-1").getByRole("link", { name: /EXP-\d+/ }).click();
   await expect(page.getByRole("heading", { name: /EXP-\d+/ })).toBeVisible();
   await expect(page.getByText(/concluída \(rota ROT-\d+\)/)).toBeVisible();
-  await expect(page.getByText("Lisboa, PT", { exact: true })).toBeVisible();
+  await expect(page.getByText("Lisboa, PT", { exact: true }).first()).toBeVisible();
 
   await page.getByLabel("Descrição").fill("Frete rota sul");
   await page.getByLabel("Valor").fill("250");

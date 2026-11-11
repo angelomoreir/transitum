@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell, Check, CheckCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import type { NotificationDto } from "@blujay/shared";
+import type { NotificationDto } from "@transitum/shared";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";

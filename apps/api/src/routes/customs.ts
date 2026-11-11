@@ -6,7 +6,7 @@ import {
   customsItemDtoSchema,
   customsUpdateSchema,
   type CustomsStatus,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
 import {
   customsItems,

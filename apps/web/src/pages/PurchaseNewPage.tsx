@@ -9,7 +9,7 @@ import {
   type PartnerDto,
   type PurchaseOrderDetailDto,
   type WarehouseDto,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

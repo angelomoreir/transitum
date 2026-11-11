@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addressSchema } from "./shipments.js";
+import { addressSchema, coordsSchema } from "./shipments.js";
 
 export const ROUTE_STATUSES = ["draft", "dispatched", "completed", "cancelled"] as const;
 export type RouteStatus = (typeof ROUTE_STATUSES)[number];
@@ -40,6 +40,10 @@ export const routeCreateSchema = z.object({
   name: z.string().trim().min(2).max(160),
   carrierId: z.string().uuid().optional(),
   driverName: z.string().trim().max(120).optional(),
+  /** Utilizador com função "driver" — vê a rota na app móvel */
+  driverUserId: z.string().uuid().optional(),
+  /** Viatura da frota — preenche `vehicleRef` com a matrícula se omitido */
+  vehicleId: z.string().uuid().optional(),
   vehicleRef: z.string().trim().max(40).optional(),
   plannedStartAt: z.string().optional(),
   plannedEndAt: z.string().optional(),
@@ -52,6 +56,8 @@ export const routeUpdateSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   carrierId: z.string().uuid().nullish(),
   driverName: z.string().trim().max(120).nullish(),
+  driverUserId: z.string().uuid().nullish(),
+  vehicleId: z.string().uuid().nullish(),
   vehicleRef: z.string().trim().max(40).nullish(),
   plannedStartAt: z.string().nullish(),
   plannedEndAt: z.string().nullish(),
@@ -78,6 +84,8 @@ export const routeStopDtoSchema = z.object({
   shipmentId: z.string().nullable(),
   shipmentNumber: z.string().nullable(),
   address: addressSchema,
+  coords: coordsSchema.nullable(),
+  hasProof: z.boolean(),
   plannedAt: z.string().nullable(),
   arrivedAt: z.string().nullable(),
   doneAt: z.string().nullable(),
@@ -94,6 +102,9 @@ export const routeDtoSchema = z.object({
   carrierId: z.string().nullable(),
   carrierName: z.string().nullable(),
   driverName: z.string().nullable(),
+  driverUserId: z.string().nullable(),
+  vehicleId: z.string().nullable(),
+  vehiclePlate: z.string().nullable(),
   vehicleRef: z.string().nullable(),
   plannedStartAt: z.string().nullable(),
   plannedEndAt: z.string().nullable(),
@@ -106,6 +117,10 @@ export type RouteDto = z.infer<typeof routeDtoSchema>;
 
 export const routeDetailDtoSchema = routeDtoSchema.extend({
   stops: z.array(routeStopDtoSchema),
+  /** Últimas posições GPS do motorista (mais recente primeiro) */
+  positions: z.array(
+    z.object({ lat: z.number(), lng: z.number(), recordedAt: z.string() }),
+  ),
 });
 export type RouteDetailDto = z.infer<typeof routeDetailDtoSchema>;
 

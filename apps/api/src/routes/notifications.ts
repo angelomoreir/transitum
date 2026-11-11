@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { listNotificationsQuerySchema, notificationSchema } from "@blujay/shared";
+import { listNotificationsQuerySchema, notificationSchema } from "@transitum/shared";
 import { z } from "zod";
 import { notifications } from "../db/schema.js";
 import { notFound } from "../lib/errors.js";

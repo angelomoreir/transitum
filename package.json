@@ -1,5 +1,5 @@
 {
-  "name": "blujay",
+  "name": "transitum",
   "version": "0.1.0",
   "private": true,
   "description": "Plataforma SaaS de logística e supply chain",
@@ -8,14 +8,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @blujay/api\" \"npm run dev -w @blujay/web\"",
-    "dev:api": "npm run dev -w @blujay/api",
-    "dev:web": "npm run dev -w @blujay/web",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @transitum/api\" \"npm run dev -w @transitum/web\"",
+    "dev:api": "npm run dev -w @transitum/api",
+    "dev:web": "npm run dev -w @transitum/web",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "playwright test",
-    "db:generate": "npm run db:generate -w @blujay/api",
-    "db:seed": "npm run db:seed -w @blujay/api"
+    "db:generate": "npm run db:generate -w @transitum/api",
+    "db:seed": "npm run db:seed -w @transitum/api"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",

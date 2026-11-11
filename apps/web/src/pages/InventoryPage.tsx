@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { MoreHorizontal, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, FileUp, MoreHorizontal, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   itemCreateSchema,
@@ -8,12 +8,20 @@ import {
   movementCreateSchema,
   type ItemDto,
   type MovementType,
+  type StockAlertDto,
   type StockLevelDto,
   type StockMovementDto,
   type WarehouseDto,
-} from "@blujay/shared";
+  type WarehouseLocationDto,
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { BinsTab } from "@/components/BinsTab";
+import { CsvImportDialog } from "@/components/CsvImportDialog";
+import { InventoryCountsTab } from "@/components/InventoryCountsTab";
+import { LocationsTab } from "@/components/LocationsTab";
+import { LotsTab } from "@/components/LotsTab";
+import { SerialsTab } from "@/components/SerialsTab";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,7 +58,15 @@ import {
 } from "@/components/ui/table";
 
 const PAGE_SIZE = 20;
-type Tab = "items" | "stock" | "movements";
+type Tab =
+  | "items"
+  | "stock"
+  | "movements"
+  | "lots"
+  | "bins"
+  | "serials"
+  | "counts"
+  | "locations";
 
 const MOVEMENT_VARIANT: Record<MovementType, "success" | "destructive" | "warning" | "secondary"> = {
   in: "success",
@@ -70,7 +86,7 @@ export function InventoryPage() {
         <p className="text-sm text-muted-foreground">{t("inventory.subtitle")}</p>
       </div>
       <div className="flex gap-1 rounded-lg border border-border bg-card p-1 w-fit">
-        {(["items", "stock", "movements"] as const).map((tb) => (
+        {(["items", "stock", "movements", "lots", "bins", "serials", "counts", "locations"] as const).map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
@@ -89,6 +105,11 @@ export function InventoryPage() {
       {tab === "items" && <ItemsTab />}
       {tab === "stock" && <StockTab />}
       {tab === "movements" && <MovementsTab />}
+      {tab === "lots" && <LotsTab />}
+      {tab === "bins" && <BinsTab />}
+      {tab === "serials" && <SerialsTab />}
+      {tab === "counts" && <InventoryCountsTab />}
+      {tab === "locations" && <LocationsTab />}
     </div>
   );
 }
@@ -137,6 +158,7 @@ function ItemsTab() {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<ItemDto | null>(null);
   const { data, reload } = useList<ItemDto>(
     "/api/items",
@@ -157,10 +179,16 @@ function ItemsTab() {
           }}
         />
         {can("inventory:write") && (
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" />
-            {t("inventory.items.new")}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
+              <FileUp className="h-4 w-4" />
+              {t("import.title")}
+            </Button>
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4" />
+              {t("inventory.items.new")}
+            </Button>
+          </div>
         )}
       </div>
       <div className="rounded-lg border border-border bg-card">
@@ -233,6 +261,15 @@ function ItemsTab() {
       </div>
       <Pagination page={page} setPage={setPage} total={data?.total ?? 0} />
       {creating && <ItemForm open onOpenChange={setCreating} onDone={reload} />}
+      {importing && (
+        <CsvImportDialog
+          open
+          onOpenChange={setImporting}
+          endpoint="/api/items/import"
+          template={t("import.templates.items")}
+          onDone={reload}
+        />
+      )}
       {editing && (
         <ItemForm open onOpenChange={(o) => !o && setEditing(null)} item={editing} onDone={reload} />
       )}
@@ -258,6 +295,7 @@ function ItemForm({
     description: item?.description ?? "",
     unit: item?.unit ?? "un",
     weightKg: item?.weightKg != null ? String(item.weightKg) : "",
+    serialized: item?.serialized ?? false,
   });
   const [loading, setLoading] = useState(false);
 
@@ -269,6 +307,7 @@ function ItemForm({
       description: form.description || undefined,
       unit: form.unit,
       weightKg: form.weightKg ? Number(form.weightKg) : undefined,
+      serialized: form.serialized,
     };
     const parsed = itemCreateSchema.safeParse(payload);
     if (!parsed.success) {
@@ -348,6 +387,15 @@ function ItemForm({
               onChange={(e) => setForm((f) => ({ ...f, weightKg: e.target.value }))}
             />
           </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={form.serialized}
+              onChange={(e) => setForm((f) => ({ ...f, serialized: e.target.checked }))}
+            />
+            {t("inventory.items.serialized")}
+          </label>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
               {loading ? t("common.loading") : t("common.save")}
@@ -363,24 +411,61 @@ function ItemForm({
 
 function StockTab() {
   const { t } = useTranslation();
+  const { can } = useAuth();
   const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
   const [warehouseId, setWarehouseId] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const { data } = useList<StockLevelDto>(
+  const [alerts, setAlerts] = useState<StockAlertDto[]>([]);
+  const [reorderTarget, setReorderTarget] = useState<StockLevelDto | null>(null);
+  const { data, reload } = useList<StockLevelDto>(
     "/api/stock",
     { page, pageSize: PAGE_SIZE, warehouseId: warehouseId || undefined, q },
     [page, warehouseId, q],
   );
 
+  const loadAlerts = useCallback(() => {
+    api<{ items: StockAlertDto[] }>("/api/stock/alerts")
+      .then((r) => setAlerts(r.items))
+      .catch(() => setAlerts([]));
+  }, []);
+
   useEffect(() => {
     api<{ items: WarehouseDto[] }>("/api/warehouses", { params: { pageSize: 100 } })
       .then((r) => setWarehouses(r.items))
       .catch(() => setWarehouses([]));
-  }, []);
+    loadAlerts();
+  }, [loadAlerts]);
+
+  const onReorderDone = async () => {
+    await reload();
+    loadAlerts();
+  };
 
   return (
     <div className="space-y-4">
+      {alerts.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            {t("inventory.stock.lowStock")}
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-2" data-testid="stock-alerts">
+            {alerts.map((a) => (
+              <li
+                key={`${a.warehouseId}-${a.itemId}`}
+                className="rounded-md border border-amber-200 bg-card px-2 py-1 text-xs"
+              >
+                <span className="font-mono font-medium">{a.sku}</span> — {a.warehouseCode}:{" "}
+                {a.available}/{a.reorderPoint} {a.unit}
+                <span className="ml-1 text-destructive">
+                  ({t("inventory.stock.deficit", { count: a.deficit })})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <Select
           value={warehouseId}
@@ -423,20 +508,21 @@ function StockTab() {
                 {t("inventory.stock.reserved")}
               </TableHead>
               <TableHead className="text-right">{t("inventory.stock.available")}</TableHead>
+              <TableHead className="text-right">{t("inventory.stock.reorderPoint")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!data ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : data.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   {t("inventory.stock.empty")}
                 </TableCell>
               </TableRow>
@@ -453,6 +539,19 @@ function StockTab() {
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-right">{s.reserved}</TableCell>
                   <TableCell className="text-right">{s.onHand - s.reserved}</TableCell>
+                  <TableCell className="text-right">
+                    {can("inventory:write") ? (
+                      <button
+                        className="rounded px-1 hover:bg-accent"
+                        title={t("inventory.stock.setReorder")}
+                        onClick={() => setReorderTarget(s)}
+                      >
+                        {s.reorderPoint ?? "—"}
+                      </button>
+                    ) : (
+                      (s.reorderPoint ?? "—")
+                    )}
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -460,7 +559,85 @@ function StockTab() {
         </Table>
       </div>
       <Pagination page={page} setPage={setPage} total={data?.total ?? 0} />
+      {reorderTarget && (
+        <ReorderDialog
+          open
+          onOpenChange={(o) => !o && setReorderTarget(null)}
+          level={reorderTarget}
+          onDone={onReorderDone}
+        />
+      )}
     </div>
+  );
+}
+
+function ReorderDialog({
+  open,
+  onOpenChange,
+  level,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  level: StockLevelDto;
+  onDone: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState(level.reorderPoint != null ? String(level.reorderPoint) : "");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api("/api/stock/reorder-point", {
+        method: "PUT",
+        body: {
+          itemId: level.itemId,
+          warehouseId: level.warehouseId,
+          reorderPoint: value === "" ? null : Number(value),
+        },
+      });
+      toast.success(t("inventory.stock.reorderSaved"));
+      onOpenChange(false);
+      await onDone();
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{t("inventory.stock.setReorder")}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            {level.sku} · {level.warehouseName}
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="rp">{t("inventory.stock.reorderPoint")}</Label>
+            <Input
+              id="rp"
+              type="number"
+              min={0}
+              step={1}
+              value={value}
+              placeholder="—"
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("common.loading") : t("common.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -517,6 +694,7 @@ function MovementsTab() {
               <TableHead className="text-right">{t("inventory.movements.quantity")}</TableHead>
               <TableHead className="hidden md:table-cell">{t("inventory.movements.warehouse")}</TableHead>
               <TableHead className="hidden lg:table-cell">{t("inventory.movements.reference")}</TableHead>
+              <TableHead className="hidden lg:table-cell">{t("inventory.lots.code")}</TableHead>
               <TableHead className="hidden lg:table-cell">{t("inventory.movements.by")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -524,14 +702,14 @@ function MovementsTab() {
             {!data ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : data.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                   {t("inventory.movements.empty")}
                 </TableCell>
               </TableRow>
@@ -555,10 +733,14 @@ function MovementsTab() {
                   </TableCell>
                   <TableCell className="hidden md:table-cell font-mono text-xs">
                     {m.warehouseCode ?? "—"}
+                    {m.locationCode && ` · ${m.locationCode}`}
                     {m.toWarehouseCode && ` → ${m.toWarehouseCode}`}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-muted-foreground">
                     {m.reference ?? "—"}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell font-mono text-xs">
+                    {m.lotCode ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-muted-foreground">
                     {m.createdByName ?? "—"}
@@ -587,14 +769,19 @@ function MovementForm({
   const { t } = useTranslation();
   const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
   const [itemsList, setItemsList] = useState<ItemDto[]>([]);
+  const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
   const [form, setForm] = useState({
     type: "in" as MovementType,
     itemId: "",
     quantity: "",
     warehouseId: "",
     toWarehouseId: "",
+    locationId: "",
     reference: "",
     note: "",
+    lotCode: "",
+    lotExpiresAt: "",
+    serials: "",
   });
   const [loading, setLoading] = useState(false);
 
@@ -608,6 +795,19 @@ function MovementForm({
     }).then((r) => setItemsList(r.items)).catch(() => {});
   }, [open]);
 
+  // Bins do armazém selecionado (putaway / consumo dirigido)
+  useEffect(() => {
+    if (!form.warehouseId) {
+      setLocations([]);
+      return;
+    }
+    api<{ items: WarehouseLocationDto[] }>(`/api/warehouses/${form.warehouseId}/locations`)
+      .then((r) => setLocations(r.items.filter((l) => l.active)))
+      .catch(() => setLocations([]));
+  }, [form.warehouseId]);
+
+  const selectedItem = itemsList.find((it) => it.id === form.itemId);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const payload = {
@@ -616,8 +816,18 @@ function MovementForm({
       quantity: Number(form.quantity),
       warehouseId: form.warehouseId || undefined,
       toWarehouseId: form.type === "transfer" ? form.toWarehouseId : undefined,
+      locationId: form.type !== "transfer" && form.locationId ? form.locationId : undefined,
       reference: form.reference || undefined,
       note: form.note || undefined,
+      lotCode: form.type === "in" && form.lotCode ? form.lotCode : undefined,
+      lotExpiresAt:
+        form.type === "in" && form.lotCode && form.lotExpiresAt
+          ? form.lotExpiresAt
+          : undefined,
+      serials:
+        selectedItem?.serialized && form.serials.trim()
+          ? form.serials.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
+          : undefined,
     };
     const parsed = movementCreateSchema.safeParse(payload);
     if (!parsed.success) {
@@ -732,6 +942,65 @@ function MovementForm({
               </div>
             )}
           </div>
+          {form.type !== "transfer" && locations.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>{t("inventory.bins.location")}</Label>
+              <Select
+                value={form.locationId || "none"}
+                onValueChange={(v) => setForm((f) => ({ ...f, locationId: v === "none" ? "" : v }))}
+              >
+                <SelectTrigger data-testid="mov-location">
+                  <SelectValue placeholder={t("inventory.bins.none")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("inventory.bins.none")}</SelectItem>
+                  {locations.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.code}
+                      {l.zone ? ` (${l.zone})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.type === "in" ? t("inventory.bins.putawayHint") : t("inventory.bins.pickHint")}
+              </p>
+            </div>
+          )}
+          {form.type === "in" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="mv-lot">{t("inventory.lots.code")}</Label>
+                <Input
+                  id="mv-lot"
+                  value={form.lotCode}
+                  onChange={(e) => setForm((f) => ({ ...f, lotCode: e.target.value }))}
+                  placeholder={t("inventory.lots.codeHint")}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mv-lot-exp">{t("inventory.lots.expiresAt")}</Label>
+                <Input
+                  id="mv-lot-exp"
+                  type="date"
+                  value={form.lotExpiresAt}
+                  onChange={(e) => setForm((f) => ({ ...f, lotExpiresAt: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
+          {selectedItem?.serialized && form.type !== "adjust" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="mv-serials">{t("inventory.serials.list")}</Label>
+              <textarea
+                id="mv-serials"
+                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                placeholder={t("inventory.serials.hint", { count: Number(form.quantity) || 0 })}
+                value={form.serials}
+                onChange={(e) => setForm((f) => ({ ...f, serials: e.target.value }))}
+              />
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="mv-ref">{t("inventory.movements.reference")}</Label>

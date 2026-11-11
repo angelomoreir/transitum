@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import { Layers, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { ORDER_STATUSES, type OrderDto, type OrderStatus } from "@blujay/shared";
-import { api } from "@/lib/api";
+import {
+  ORDER_STATUSES,
+  type OrderDto,
+  type OrderStatus,
+  type PickWaveDto,
+} from "@transitum/shared";
+import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CsvImportDialog } from "@/components/CsvImportDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -44,6 +57,8 @@ export function OrdersPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const [importOpen, setImportOpen] = useState(false);
+  const [waveOpen, setWaveOpen] = useState(false);
 
   const load = useCallback(async () => {
     const res = await api<{ items: OrderDto[]; total: number }>("/api/orders", {
@@ -65,14 +80,28 @@ export function OrdersPage() {
           <h1 className="text-2xl font-semibold">{t("orders.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("orders.subtitle")}</p>
         </div>
-        {can("orders:write") && (
-          <Button asChild>
-            <Link to="/orders/new">
-              <Plus className="h-4 w-4" />
-              {t("orders.new")}
-            </Link>
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {can("orders:read") && (
+            <Button variant="outline" onClick={() => setWaveOpen(true)}>
+              <Layers className="h-4 w-4" />
+              {t("orders.wave")}
+            </Button>
+          )}
+          {can("orders:write") && (
+            <>
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4" />
+                {t("orders.importCsv")}
+              </Button>
+              <Button asChild>
+                <Link to="/orders/new">
+                  <Plus className="h-4 w-4" />
+                  {t("orders.new")}
+                </Link>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -188,6 +217,190 @@ export function OrdersPage() {
           </Button>
         </div>
       </div>
+
+      <CsvImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        endpoint="/api/orders/import"
+        template="encomenda;cliente;sku;quantidade;data;cidade;pais"
+        onDone={load}
+      />
+      <PickWaveDialog open={waveOpen} onOpenChange={setWaveOpen} />
     </div>
+  );
+}
+
+/** Wave picking — seleciona encomendas e agrega as linhas por artigo/armazém. */
+function PickWaveDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [candidates, setCandidates] = useState<OrderDto[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [wave, setWave] = useState<PickWaveDto | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelected(new Set());
+    setWave(null);
+    api<{ items: OrderDto[] }>("/api/orders", {
+      params: { status: "confirmed", pageSize: 100 },
+    })
+      .then((r) => setCandidates(r.items))
+      .catch(() => setCandidates([]));
+  }, [open]);
+
+  async function generate() {
+    setBusy(true);
+    try {
+      const res = await api<{ wave: PickWaveDto }>("/api/orders/pick-wave", {
+        method: "POST",
+        body: { orderIds: [...selected] },
+      });
+      setWave(res.wave);
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Persiste a wave (cria em /pick-waves com linhas por expedir)
+  async function saveWave() {
+    setBusy(true);
+    try {
+      await api("/api/pick-waves", {
+        method: "POST",
+        body: { orderIds: [...selected] },
+      });
+      toast.success(t("orders.waveSaved"));
+      onOpenChange(false);
+      navigate("/pick-waves");
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggle(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{t("orders.wave")}</DialogTitle>
+        </DialogHeader>
+        {!wave ? (
+          <>
+            <p className="text-sm text-muted-foreground">{t("orders.waveHint")}</p>
+            <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+              {candidates.length === 0 && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  {t("orders.waveEmpty")}
+                </p>
+              )}
+              {candidates.map((o) => (
+                <label
+                  key={o.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(o.id)}
+                    onChange={() => toggle(o.id)}
+                  />
+                  <span className="font-mono text-xs">{o.number}</span>
+                  <span className="flex-1 truncate text-sm">{o.customerName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {o.requestedDate ?? ""}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                onClick={() => void generate()}
+                disabled={busy || selected.size === 0}
+                data-testid="wave-generate"
+              >
+                {t("orders.waveGenerate")}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {t("orders.waveSummary", {
+                orders: wave.orders.length,
+                warehouse: wave.warehouseName ?? "—",
+              })}
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("orders.location")}</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>{t("orders.item")}</TableHead>
+                  <TableHead className="text-right">{t("orders.toPick")}</TableHead>
+                  <TableHead className="text-right">{t("orders.available")}</TableHead>
+                  <TableHead>{t("orders.waveOrders")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {wave.lines.map((l, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono text-xs">{l.location ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">{l.sku ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{l.itemName}</TableCell>
+                    <TableCell className="text-right font-medium">{l.toPick}</TableCell>
+                    <TableCell className="text-right">
+                      {l.available != null ? l.available : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {l.orders.map((o) => `${o.orderNumber}×${o.qty}`).join(", ")}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {wave.lines.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
+                      {t("orders.waveNoLines")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setWave(null)}>
+                {t("common.back")}
+              </Button>
+              <Button variant="outline" onClick={() => window.print()}>
+                {t("orders.wavePrint")}
+              </Button>
+              <Button onClick={() => void saveWave()} disabled={busy}>
+                {t("orders.waveSave")}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

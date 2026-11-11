@@ -38,7 +38,7 @@ async function attemptWebhook(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(signature ? { "x-blujay-signature": signature } : {}),
+        ...(signature ? { "x-transitum-signature": signature } : {}),
       },
       body,
       signal: AbortSignal.timeout(5000),

@@ -5,12 +5,13 @@ import {
   listUsersQuerySchema,
   updateUserSchema,
   userDtoSchema,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
 import { authTokens, refreshTokens, users } from "../db/schema.js";
 import { env } from "../env.js";
 import { audit } from "../lib/audit.js";
 import { getSubscriptionWithPlan } from "../lib/billing.js";
+import { isProtectedDemoUser } from "../lib/demo.js";
 import { badRequest, forbidden, notFound } from "../lib/errors.js";
 import { toUserDto } from "../lib/session.js";
 import { generateToken, hashToken } from "../lib/tokens.js";
@@ -120,8 +121,8 @@ export const userRoutes: FastifyPluginAsyncZod = async (app) => {
       const inviteUrl = `${env.WEB_BASE_URL}/accept-invite?token=${token}`;
       await app.mailer.send(
         email,
-        "Convite para a Blujay",
-        `Foi convidado para a plataforma Blujay. Ative a sua conta: ${inviteUrl}`,
+        "Convite para a Transitum",
+        `Foi convidado para a plataforma Transitum. Ative a sua conta: ${inviteUrl}`,
       );
       await audit(app.db, {
         tenantId: req.user.tid,
@@ -154,6 +155,9 @@ export const userRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!target) throw notFound("Utilizador não encontrado");
       if (target.id === req.user.sub && (req.body.role || req.body.status)) {
         throw badRequest("Não pode alterar a sua própria função ou estado");
+      }
+      if (isProtectedDemoUser(target.email) && (req.body.role || req.body.status)) {
+        throw forbidden("Modo demonstração — contas demo não podem ser alteradas");
       }
       // Apenas admin pode alterar função/estado
       if ((req.body.role || req.body.status) && req.user.role !== "admin") {
@@ -216,6 +220,9 @@ export const userRoutes: FastifyPluginAsyncZod = async (app) => {
         .where(and(eq(users.id, id), eq(users.tenantId, req.user.tid)));
       if (!target) throw notFound("Utilizador não encontrado");
       if (target.id === req.user.sub) throw badRequest("Não pode suspender a sua própria conta");
+      if (isProtectedDemoUser(target.email)) {
+        throw forbidden("Modo demonstração — contas demo não podem ser suspensas");
+      }
       if (target.role === "admin" && req.user.role !== "admin") {
         throw forbidden("Apenas administradores podem suspender administradores");
       }
@@ -264,8 +271,8 @@ export const userRoutes: FastifyPluginAsyncZod = async (app) => {
       const inviteUrl = `${env.WEB_BASE_URL}/accept-invite?token=${token}`;
       await app.mailer.send(
         target.email,
-        "Convite para a Blujay",
-        `Foi convidado para a plataforma Blujay. Ative a sua conta: ${inviteUrl}`,
+        "Convite para a Transitum",
+        `Foi convidado para a plataforma Transitum. Ative a sua conta: ${inviteUrl}`,
       );
       await audit(app.db, {
         tenantId: req.user.tid,

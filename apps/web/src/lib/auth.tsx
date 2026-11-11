@@ -10,17 +10,20 @@ import {
 import {
   hasPermission,
   type AuthResponse,
+  type LoginResponse,
   type Permission,
   type TenantDto,
   type UserDto,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, restoreSession, setAccessToken } from "./api";
 
 interface AuthState {
   user: UserDto | null;
   tenant: TenantDto | null;
   ready: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** Devolve o mfaToken quando a conta exige segundo fator, null caso contrário */
+  login: (email: string, password: string) => Promise<string | null>;
+  verifyMfa: (mfaToken: string, code: string) => Promise<void>;
   register: (input: {
     companyName: string;
     name: string;
@@ -64,10 +67,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await api<AuthResponse>("/api/auth/login", {
+    async (email: string, password: string): Promise<string | null> => {
+      const res = await api<LoginResponse>("/api/auth/login", {
         method: "POST",
         body: { email, password },
+      });
+      if ("mfaRequired" in res) return res.mfaToken;
+      setAuth(res);
+      return null;
+    },
+    [setAuth],
+  );
+
+  const verifyMfa = useCallback(
+    async (mfaToken: string, code: string) => {
+      const res = await api<AuthResponse>("/api/auth/mfa/verify", {
+        method: "POST",
+        body: { mfaToken, code },
       });
       setAuth(res);
     },
@@ -107,8 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, tenant, ready, login, register, logout, setAuth, can, refreshUser }),
-    [user, tenant, ready, login, register, logout, setAuth, can, refreshUser],
+    () => ({ user, tenant, ready, login, verifyMfa, register, logout, setAuth, can, refreshUser }),
+    [user, tenant, ready, login, verifyMfa, register, logout, setAuth, can, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

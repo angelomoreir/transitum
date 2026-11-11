@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { TenantDto } from "@blujay/shared";
+import type { TenantDto } from "@transitum/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { FiscalCard } from "@/components/FiscalCard";
+import { MfaCard } from "@/components/MfaCard";
+import { SsoProvidersCard } from "@/components/SsoProvidersCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,6 +91,12 @@ export function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      <FiscalCard />
+
+      <MfaCard />
+
+      <SsoProvidersCard />
 
       <Card>
         <CardHeader>

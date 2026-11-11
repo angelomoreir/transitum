@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { registerSchema } from "@blujay/shared";
+import { registerSchema } from "@transitum/shared";
 import { useAuth } from "@/lib/auth";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";

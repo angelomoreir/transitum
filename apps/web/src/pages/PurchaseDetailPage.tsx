@@ -7,7 +7,7 @@ import {
   PO_TRANSITIONS,
   type PoStatus,
   type PurchaseOrderDetailDto,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DocumentsCard } from "@/components/DocumentsCard";

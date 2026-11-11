@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, MapPin, Trash2 } from "lucide-react";
+import { ArrowLeft, MapPin, Route as RouteOptIcon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   ROUTE_TRANSITIONS,
@@ -13,10 +13,11 @@ import {
   type ShipmentDto,
   type StopStatus,
   type StopType,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DocumentsCard } from "@/components/DocumentsCard";
+import { LeafletMap, type MapPoint } from "@/components/LeafletMap";
 import { ROUTE_STATUS_VARIANT } from "@/pages/RoutesPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,6 +98,23 @@ export function RouteDetailPage() {
         body: { status },
       });
       await load();
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const optimize = async () => {
+    setBusy(true);
+    try {
+      const res = await api<{ route: RouteDetailDto; moved: number }>(
+        `/api/routes/${id}/optimize`,
+        { method: "POST", body: {} },
+      );
+      setRoute(res.route);
+      if (res.moved > 0) toast.success(t("routes.optimized", { count: res.moved }));
+      else toast.info(t("routes.optimizeNoCoords"));
     } catch (err) {
       toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
     } finally {
@@ -202,13 +220,38 @@ export function RouteDetailPage() {
         </CardContent>
       </Card>
 
+      {(() => {
+        const pts: MapPoint[] = route.stops
+          .filter((s) => s.coords)
+          .map((s) => ({
+            coords: s.coords!,
+            label: `${s.seq}. ${s.address.city}`,
+            kind: s.type === "pickup" ? ("pickup" as const) : ("delivery" as const),
+          }));
+        const last = route.positions[0];
+        if (last) pts.push({ coords: last, label: t("ops.lastPosition"), kind: "position" });
+        return pts.length > 0 ? <LeafletMap points={pts} /> : null;
+      })()}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">{t("routes.stops")}</CardTitle>
           {canEditStops && (
-            <Button variant="outline" size="sm" onClick={() => setAddOpen((o) => !o)}>
-              {t("routes.addStop")}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || route.stops.filter((s) => s.status === "pending").length < 2}
+                onClick={optimize}
+                data-testid="optimize-stops"
+              >
+                <RouteOptIcon className="mr-1 h-4 w-4" />
+                {t("routes.optimize")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setAddOpen((o) => !o)}>
+                {t("routes.addStop")}
+              </Button>
+            </div>
           )}
         </CardHeader>
         <CardContent className="space-y-4">
@@ -314,6 +357,9 @@ export function RouteDetailPage() {
                       >
                         {stop.shipmentNumber}
                       </Link>
+                    )}
+                    {stop.hasProof && (
+                      <Badge variant="success">{t("ops.pod")}</Badge>
                     )}
                   </div>
                   <p className="mt-1 flex items-center gap-1 text-sm">

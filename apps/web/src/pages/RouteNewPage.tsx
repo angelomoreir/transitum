@@ -10,7 +10,9 @@ import {
   type RouteDetailDto,
   type ShipmentDto,
   type StopType,
-} from "@blujay/shared";
+  type UserDto,
+  type VehicleDto,
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,10 +54,14 @@ export function RouteNewPage() {
   const navigate = useNavigate();
   const [carriers, setCarriers] = useState<PartnerDto[]>([]);
   const [shipments, setShipments] = useState<ShipmentDto[]>([]);
+  const [drivers, setDrivers] = useState<UserDto[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleDto[]>([]);
   const [form, setForm] = useState({
     name: "",
     carrierId: "",
     driverName: "",
+    driverUserId: "",
+    vehicleId: "",
     vehicleRef: "",
     plannedStartAt: "",
     plannedEndAt: "",
@@ -75,6 +81,12 @@ export function RouteNewPage() {
     })
       .then((r) => setShipments(r.items))
       .catch(() => setShipments([]));
+    api<{ items: UserDto[] }>("/api/users", { params: { role: "driver", pageSize: 100 } })
+      .then((r) => setDrivers(r.items))
+      .catch(() => {});
+    api<{ items: VehicleDto[] }>("/api/vehicles", { params: { active: "true", pageSize: 100 } })
+      .then((r) => setVehicles(r.items))
+      .catch(() => {});
   }, []);
 
   const setStop = (i: number, patch: Partial<StopForm>) =>
@@ -95,6 +107,8 @@ export function RouteNewPage() {
       name: form.name,
       carrierId: form.carrierId || undefined,
       driverName: form.driverName || undefined,
+      driverUserId: form.driverUserId || undefined,
+      vehicleId: form.vehicleId || undefined,
       vehicleRef: form.vehicleRef || undefined,
       plannedStartAt: form.plannedStartAt
         ? new Date(form.plannedStartAt).toISOString()
@@ -187,11 +201,51 @@ export function RouteNewPage() {
               />
             </div>
             <div className="space-y-1.5">
+              <Label>{t("routes.driverUser")}</Label>
+              <Select
+                value={form.driverUserId || "none"}
+                onValueChange={(v) => setForm((f) => ({ ...f, driverUserId: v === "none" ? "" : v }))}
+              >
+                <SelectTrigger data-testid="route-driver-user">
+                  <SelectValue placeholder={t("routes.selectDriverUser")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("routes.noDriverUser")}</SelectItem>
+                  {drivers.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} — {d.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("routes.driverUserHint")}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("routes.fleetVehicle")}</Label>
+              <Select
+                value={form.vehicleId || "none"}
+                onValueChange={(v) => setForm((f) => ({ ...f, vehicleId: v === "none" ? "" : v }))}
+              >
+                <SelectTrigger data-testid="route-vehicle">
+                  <SelectValue placeholder={t("routes.selectVehicle")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("routes.noVehicle")}</SelectItem>
+                  {vehicles.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.plate} — {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="r-vehicle">{t("routes.vehicle")}</Label>
               <Input
                 id="r-vehicle"
                 value={form.vehicleRef}
                 onChange={(e) => setForm((f) => ({ ...f, vehicleRef: e.target.value }))}
+                placeholder={t("routes.vehicleRefHint")}
               />
             </div>
             <div className="space-y-1.5">

@@ -4,15 +4,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: blujay
-      POSTGRES_PASSWORD: blujay
-      POSTGRES_DB: blujay
+      POSTGRES_USER: transitum
+      POSTGRES_PASSWORD: transitum
+      POSTGRES_DB: transitum
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U blujay"]
+      test: ["CMD-SHELL", "pg_isready -U transitum"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,8 +21,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: blujay
-      MINIO_ROOT_PASSWORD: blujay-dev-only
+      MINIO_ROOT_USER: transitum
+      MINIO_ROOT_PASSWORD: transitum-dev-only
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -35,8 +35,8 @@ services:
     depends_on: [minio]
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 blujay blujay-dev-only &&
-      mc mb -p local/blujay-documents || true
+      mc alias set local http://minio:9000 transitum transitum-dev-only &&
+      mc mb -p local/transitum-documents || true
       "
 
   api:
@@ -46,17 +46,24 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3001"
-      DATABASE_URL: postgres://blujay:blujay@postgres:5432/blujay
+      DATABASE_URL: postgres://transitum:transitum@postgres:5432/transitum
       JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET no ambiente}
+      SECRETS_KEY: ${SECRETS_KEY:?define SECRETS_KEY no ambiente}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-Transitum <no-reply@transitum.local>}
+      SMS_PROVIDER: ${SMS_PROVIDER:-console}
+      AT_MODE: ${AT_MODE:-mock}
+      GEOCODER: ${GEOCODER:-nominatim}
+      DEMO_MODE: ${DEMO_MODE:-false}
       CORS_ORIGIN: http://localhost:8080
       WEB_BASE_URL: http://localhost:8080
       COOKIE_SECURE: "false"
       PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-}
       S3_ENDPOINT: http://minio:9000
       S3_REGION: eu-west-1
-      S3_BUCKET: blujay-documents
-      S3_ACCESS_KEY_ID: blujay
-      S3_SECRET_ACCESS_KEY: blujay-dev-only
+      S3_BUCKET: transitum-documents
+      S3_ACCESS_KEY_ID: transitum
+      S3_SECRET_ACCESS_KEY: transitum-dev-only
     ports:
       - "3001:3001"
     depends_on:
@@ -69,6 +76,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_DEMO: ${VITE_DEMO:-0}
     ports:
       - "8080:80"
     depends_on: [api]

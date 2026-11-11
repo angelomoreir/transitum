@@ -4,7 +4,7 @@ import { refreshTokens, users, type tenants } from "../db/schema.js";
 import { env } from "../env.js";
 import { generateToken, hashToken } from "./tokens.js";
 
-export const REFRESH_COOKIE = "blujay_rt";
+export const REFRESH_COOKIE = "transitum_rt";
 
 type UserRow = typeof users.$inferSelect;
 type TenantRow = typeof tenants.$inferSelect;
@@ -60,6 +60,7 @@ export function toUserDto(u: UserRow, isPlatformAdmin = false) {
     role: u.role,
     status: u.status,
     isPlatformAdmin,
+    totpEnabled: !!u.totpEnabledAt,
     lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     createdAt: u.createdAt.toISOString(),
   };

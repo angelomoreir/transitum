@@ -5,9 +5,11 @@ import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   orderCreateSchema,
+  type ItemDto,
   type OrderDetailDto,
   type PartnerDto,
-} from "@blujay/shared";
+  type WarehouseDto,
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,16 +25,23 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 interface Line {
+  itemId: string;
   description: string;
   quantity: string;
   weightKg: string;
+  unitPrice: string;
 }
+
+const EMPTY_LINE: Line = { itemId: "", description: "", quantity: "1", weightKg: "", unitPrice: "" };
 
 export function OrderNewPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<PartnerDto[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
+  const [items, setItems] = useState<ItemDto[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
   const [requestedDate, setRequestedDate] = useState("");
   const [delivery, setDelivery] = useState({
     deliveryLine1: "",
@@ -41,7 +50,7 @@ export function OrderNewPage() {
     deliveryCountry: "PT",
   });
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ description: "", quantity: "1", weightKg: "" }]);
+  const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -50,6 +59,12 @@ export function OrderNewPage() {
     })
       .then((r) => setCustomers(r.items))
       .catch((e) => toast.error(e.message));
+    api<{ items: WarehouseDto[] }>("/api/warehouses", { params: { pageSize: 100 } })
+      .then((r) => setWarehouses(r.items.filter((w) => w.active)))
+      .catch(() => {});
+    api<{ items: ItemDto[] }>("/api/items", { params: { pageSize: 200 } })
+      .then((r) => setItems(r.items.filter((i) => i.active)))
+      .catch(() => {});
   }, []);
 
   const setLine = (i: number, patch: Partial<Line>) =>
@@ -59,6 +74,7 @@ export function OrderNewPage() {
     e.preventDefault();
     const payload = {
       customerId,
+      warehouseId: warehouseId || undefined,
       requestedDate: requestedDate || undefined,
       notes: notes || undefined,
       deliveryLine1: delivery.deliveryLine1 || undefined,
@@ -66,9 +82,11 @@ export function OrderNewPage() {
       deliveryPostalCode: delivery.deliveryPostalCode || undefined,
       deliveryCountry: delivery.deliveryCountry || undefined,
       lines: lines.map((l) => ({
-        description: l.description,
+        itemId: l.itemId || undefined,
+        description: l.itemId ? undefined : l.description,
         quantity: Number(l.quantity) || 1,
         weightKg: l.weightKg ? Number(l.weightKg) : undefined,
+        unitPrice: l.unitPrice ? Number(l.unitPrice) : undefined,
       })),
     };
     const parsed = orderCreateSchema.safeParse(payload);
@@ -133,6 +151,22 @@ export function OrderNewPage() {
                   onChange={(e) => setRequestedDate(e.target.value)}
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label>{t("orders.warehouse")}</Label>
+                <Select value={warehouseId} onValueChange={setWarehouseId}>
+                  <SelectTrigger data-testid="order-warehouse">
+                    <SelectValue placeholder={t("orders.selectWarehouse")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>
+                        {w.code} — {w.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("orders.warehouseHint")}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -196,9 +230,7 @@ export function OrderNewPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                setLines((ls) => [...ls, { description: "", quantity: "1", weightKg: "" }])
-              }
+              onClick={() => setLines((ls) => [...ls, { ...EMPTY_LINE }])}
             >
               <Plus className="h-4 w-4" />
               {t("orders.addLine")}
@@ -207,16 +239,44 @@ export function OrderNewPage() {
           <CardContent className="space-y-3">
             {lines.map((line, i) => (
               <div key={i} className="flex flex-wrap items-end gap-2" data-testid={`order-line-${i}`}>
-                <div className="min-w-48 flex-1 space-y-1.5">
-                  <Label htmlFor={`line-desc-${i}`}>{t("orders.description")}</Label>
-                  <Input
-                    id={`line-desc-${i}`}
-                    required
-                    value={line.description}
-                    onChange={(e) => setLine(i, { description: e.target.value })}
-                  />
+                <div className="w-52 space-y-1.5">
+                  <Label>{t("orders.item")}</Label>
+                  <Select
+                    value={line.itemId || "none"}
+                    onValueChange={(v) => {
+                      const it = items.find((x) => x.id === v);
+                      setLine(i, {
+                        itemId: v === "none" ? "" : v,
+                        description: it ? it.name : line.description,
+                        weightKg: it?.weightKg != null ? String(it.weightKg * (Number(line.quantity) || 1)) : line.weightKg,
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("orders.selectItem")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t("orders.freeText")}</SelectItem>
+                      {items.map((it) => (
+                        <SelectItem key={it.id} value={it.id}>
+                          {it.sku} — {it.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="w-24 space-y-1.5">
+                {!line.itemId && (
+                  <div className="min-w-40 flex-1 space-y-1.5">
+                    <Label htmlFor={`line-desc-${i}`}>{t("orders.description")}</Label>
+                    <Input
+                      id={`line-desc-${i}`}
+                      required
+                      value={line.description}
+                      onChange={(e) => setLine(i, { description: e.target.value })}
+                    />
+                  </div>
+                )}
+                <div className="w-20 space-y-1.5">
                   <Label htmlFor={`line-qty-${i}`}>{t("orders.quantity")}</Label>
                   <Input
                     id={`line-qty-${i}`}
@@ -227,7 +287,7 @@ export function OrderNewPage() {
                     onChange={(e) => setLine(i, { quantity: e.target.value })}
                   />
                 </div>
-                <div className="w-28 space-y-1.5">
+                <div className="w-24 space-y-1.5">
                   <Label htmlFor={`line-w-${i}`}>{t("orders.weightKg")}</Label>
                   <Input
                     id={`line-w-${i}`}
@@ -236,6 +296,17 @@ export function OrderNewPage() {
                     step="0.01"
                     value={line.weightKg}
                     onChange={(e) => setLine(i, { weightKg: e.target.value })}
+                  />
+                </div>
+                <div className="w-24 space-y-1.5">
+                  <Label htmlFor={`line-p-${i}`}>{t("orders.unitPrice")}</Label>
+                  <Input
+                    id={`line-p-${i}`}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={line.unitPrice}
+                    onChange={(e) => setLine(i, { unitPrice: e.target.value })}
                   />
                 </div>
                 <Button

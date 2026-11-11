@@ -1,4 +1,4 @@
-# Blujay
+# Transitum
 
 Plataforma SaaS de gestão de logística e supply chain. Monorepo npm workspaces.
 
@@ -28,6 +28,21 @@ Sem `DATABASE_URL`, a API usa **PGlite** (PostgreSQL real compilado para WASM),
 persistindo em `apps/api/.data/pglite`. Em produção defina `DATABASE_URL` para um
 Postgres normal — o mesmo schema e migrações aplicam-se.
 
+## Publicar como demonstração
+
+```powershell
+# API: modo demo protege as contas *@transitum.local (sem mudança de password,
+# MFA nem suspensão — visitantes não conseguem trancar a demo)
+DEMO_MODE=true
+
+# Web: a caixa de credenciais demo no login só aparece com VITE_DEMO=1 no build
+docker build -f apps/web/Dockerfile --build-arg VITE_DEMO=1 -t transitum-web .
+# (no compose: VITE_DEMO=1 docker compose up -d --build)
+
+# Repovoar/reset dos dados demo (agendar periodicamente, ex.: cron diário)
+SEED_DEMO=1 SEED_RESET=1 npm run db:seed -w @transitum/api
+```
+
 ## Base de dados
 
 ```powershell
@@ -54,7 +69,7 @@ npm run test:e2e      # Playwright (arranca API+web automaticamente)
 | `npm run dev` | API + web em paralelo |
 | `npm run dev:api` / `dev:web` | serviços isolados |
 | `npm run build` | build de produção |
-| `npm run typecheck -w @blujay/api` | typecheck da API |
+| `npm run typecheck -w @transitum/api` | typecheck da API |
 
 ## Funcionalidades
 

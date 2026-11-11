@@ -3,12 +3,14 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Boxes,
   Building2,
+  CarFront,
   CreditCard,
   FileText,
   LayoutDashboard,
   LogOut,
   Menu,
   Package,
+  PackageOpen,
   Route as RouteIcon,
   Search,
   Settings,
@@ -16,12 +18,17 @@ import {
   ShoppingCart,
   Truck,
   BarChart3,
+  ClipboardList,
+  Languages,
+  Layers,
+  MapPinned,
   Plug,
   Users,
   X,
   Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { setLang, type Lang } from "@/i18n";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -38,26 +45,33 @@ import { SearchPalette } from "@/components/SearchPalette";
 import { NotificationsMenu } from "@/components/NotificationsMenu";
 
 const NAV_ITEMS = [
-  { to: "/", icon: LayoutDashboard, labelKey: "nav.dashboard", end: true },
-  { to: "/partners", icon: Users, labelKey: "nav.partners" },
-  { to: "/orders", icon: Package, labelKey: "nav.orders" },
-  { to: "/shipments", icon: Truck, labelKey: "nav.shipments" },
-  { to: "/routes", icon: RouteIcon, labelKey: "nav.routes" },
-  { to: "/rates", icon: BarChart3, labelKey: "nav.rates" },
-  { to: "/warehouses", icon: Boxes, labelKey: "nav.warehouses" },
-  { to: "/inventory", icon: Package, labelKey: "nav.inventory" },
-  { to: "/purchases", icon: ShoppingCart, labelKey: "nav.purchases" },
-  { to: "/documents", icon: FileText, labelKey: "nav.documents" },
-  { to: "/automations", icon: Zap, labelKey: "nav.automations" },
-  { to: "/integrations", icon: Plug, labelKey: "nav.integrations" },
-  { to: "/billing", icon: CreditCard, labelKey: "nav.billing" },
-  { to: "/users", icon: Users, labelKey: "nav.users" },
-  { to: "/settings", icon: Settings, labelKey: "nav.settings" },
+  { to: "/", icon: LayoutDashboard, labelKey: "nav.dashboard", end: true, perm: null },
+  { to: "/driver", icon: MapPinned, labelKey: "nav.driver", perm: "driver:app" },
+  { to: "/partners", icon: Users, labelKey: "nav.partners", perm: "partners:read" },
+  { to: "/orders", icon: Package, labelKey: "nav.orders", perm: "orders:read" },
+  { to: "/returns", icon: PackageOpen, labelKey: "nav.returns", perm: "orders:read" },
+  { to: "/pick-waves", icon: Layers, labelKey: "nav.pickWaves", perm: "orders:read" },
+  { to: "/shipments", icon: Truck, labelKey: "nav.shipments", perm: "shipments:read" },
+  { to: "/routes", icon: RouteIcon, labelKey: "nav.routes", perm: "routes:read" },
+  { to: "/vehicles", icon: CarFront, labelKey: "nav.vehicles", perm: "routes:read" },
+  { to: "/rates", icon: BarChart3, labelKey: "nav.rates", perm: "rates:read" },
+  { to: "/freight-invoices", icon: FileText, labelKey: "nav.freightInvoices", perm: "costs:read" },
+  { to: "/sales-invoices", icon: FileText, labelKey: "nav.salesInvoices", perm: "billing:read" },
+  { to: "/warehouses", icon: Boxes, labelKey: "nav.warehouses", perm: "warehouses:read" },
+  { to: "/inventory", icon: Package, labelKey: "nav.inventory", perm: "inventory:read" },
+  { to: "/purchases", icon: ShoppingCart, labelKey: "nav.purchases", perm: "purchases:read" },
+  { to: "/documents", icon: FileText, labelKey: "nav.documents", perm: "documents:read" },
+  { to: "/reports", icon: ClipboardList, labelKey: "nav.reports", perm: "reports:read" },
+  { to: "/automations", icon: Zap, labelKey: "nav.automations", perm: "automations:read" },
+  { to: "/integrations", icon: Plug, labelKey: "nav.integrations", perm: "integrations:read" },
+  { to: "/billing", icon: CreditCard, labelKey: "nav.billing", perm: "billing:read" },
+  { to: "/users", icon: Users, labelKey: "nav.users", perm: "users:read" },
+  { to: "/settings", icon: Settings, labelKey: "nav.settings", perm: null },
 ] as const;
 
 export function AppShell() {
-  const { t } = useTranslation();
-  const { user, tenant, logout } = useAuth();
+  const { t, i18n } = useTranslation();
+  const { user, tenant, logout, can } = useAuth();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -78,7 +92,7 @@ export function AppShell() {
       </div>
       <nav className="flex-1 overflow-y-auto p-3">
         <div className="space-y-1">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter((item) => !item.perm || can(item.perm)).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -177,6 +191,14 @@ export function AppShell() {
                   <Settings className="h-4 w-4" />
                   {t("nav.settings")}
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {(["pt-PT", "en-GB"] as Lang[]).map((lang) => (
+                  <DropdownMenuItem key={lang} onClick={() => setLang(lang)}>
+                    <Languages className="h-4 w-4" />
+                    {lang === "pt-PT" ? "Português" : "English"}
+                    {i18n.language === lang && <span className="ml-auto text-xs">✓</span>}
+                  </DropdownMenuItem>
+                ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={async () => {

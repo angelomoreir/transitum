@@ -1,5 +1,5 @@
 # API — build a partir da raiz do monorepo:
-#   docker build -f apps/api/Dockerfile -t blujay-api .
+#   docker build -f apps/api/Dockerfile -t transitum-api .
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
@@ -16,4 +16,4 @@ COPY apps/api apps/api
 
 EXPOSE 3001
 # Migrações e seed de planos correm automaticamente no arranque
-CMD ["npm", "run", "start", "-w", "@blujay/api"]
+CMD ["npm", "run", "start", "-w", "@transitum/api"]

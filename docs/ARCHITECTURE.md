@@ -94,7 +94,7 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
   "webhook", webhookUrl, webhookSecret(HMAC), active}`. `notifyTenant()`
   (lib/notify.ts) verifica regras ativas para o gatilho: `notify` cria uma
   notificação por utilizador ativo do tenant; `webhook` faz POST JSON
-  assinado (`x-blujay-signature: sha256=...`) e regista em
+  assinado (`x-transitum-signature: sha256=...`) e regista em
   `webhook_deliveries`. Chamado nos pontos de transição
   (expedição/encomenda/rota/receção/upload/alfândega).
 - `customs_items` + `shipments.incoterm`/`customs_status` — dados aduaneiros
@@ -139,7 +139,7 @@ Hardening com Postgres RLS fica previsto para a Fase 8.
 ## Autenticação e segurança
 
 - **Access token**: JWT 15min (`{sub, tid, role, name, email}`).
-- **Refresh token**: opaco, cookie `blujay_rt` httpOnly SameSite=Lax
+- **Refresh token**: opaco, cookie `transitum_rt` httpOnly SameSite=Lax
   `path=/api/auth`, TTL 30 dias, rotação a cada refresh. Reutilização de token
   revogado revoga todas as sessões do utilizador.
 - **Passwords**: scrypt (node:crypto) com salt aleatório, `timingSafeEqual`.

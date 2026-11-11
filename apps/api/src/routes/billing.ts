@@ -7,7 +7,7 @@ import {
   planDtoSchema,
   saasInvoiceDtoSchema,
   subscriptionDtoSchema,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import {
   apiKeys,
   plans,

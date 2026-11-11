@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { and, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
-import { statsSchema } from "@blujay/shared";
+import { statsSchema } from "@transitum/shared";
 import { z } from "zod";
 import {
   auditEvents,

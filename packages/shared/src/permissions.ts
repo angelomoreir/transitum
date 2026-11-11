@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ROLES = ["admin", "manager", "operator", "viewer"] as const;
+export const ROLES = ["admin", "manager", "operator", "viewer", "driver"] as const;
 export type Role = (typeof ROLES)[number];
 export const roleSchema = z.enum(ROLES);
 
@@ -45,6 +45,8 @@ export const PERMISSIONS = [
   "integrations:write",
   "billing:read",
   "billing:write",
+  "reports:read",
+  "driver:app",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -66,9 +68,11 @@ const READ: Permission[] = [
   "documents:read",
   "trade:read",
   "billing:read",
+  "reports:read",
 ];
 
-const ALL: Permission[] = [...PERMISSIONS];
+// "driver:app" é exclusivo da função motorista (não faz parte das restantes)
+const ALL: Permission[] = PERMISSIONS.filter((p) => p !== "driver:app");
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   admin: ALL,
@@ -111,6 +115,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "trade:write",
   ],
   viewer: ["tenant:read", "users:read", "stats:read"],
+  driver: ["driver:app"],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

@@ -264,7 +264,7 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
   /orders`, `GET /orders/:id`, `GET /shipments`, `GET /shipments/:id` — mesmas
   DTOs e validações; aceita `x-api-key` (âmbito operador do tenant) ou Bearer JWT.
 - **Webhooks**: ação `webhook` nas regras de automatização com `webhookUrl` +
-  segredo HMAC por regra; POST JSON assinado (`x-blujay-signature:
+  segredo HMAC por regra; POST JSON assinado (`x-transitum-signature:
   sha256=...`), timeout 5s, log em `webhook_deliveries` (status, duração,
   erro). UI de automatizações com seletor de ação + URL; página
   `/integrations` com chaves e entregas.
@@ -392,10 +392,531 @@ Dados de dev podem ser regenerados via `SEED_DEMO=1 npm run db:seed`.
 
 ---
 
-## Estado do projeto
+## Fase 9 — Ligação encomenda→stock→expedição, documentos AT, tracking e motorista ✅ (2026-10-21)
 
-Fases 1–8 concluídas. A plataforma cobre: auth/multi-tenancy/RBAC, parceiros,
-encomendas, expedições e tracking, rotas e custos, armazéns e inventário,
-documentos e automatizações, comércio internacional, API pública e webhooks,
-subscrições e administração SaaS — com testes (114 API + 8 e2e), docs de
-arquitetura/segurança/produção e empacotamento Docker.
+Implementação da recomendação da análise comparativa com TMS/WMS concorrentes
+(Cargoson, Onfleet, CartonCloud, e2open). Migração `0008`.
+
+### Implementado
+
+- **Encomenda → stock → expedição**: linhas de encomenda ligadas a artigos
+  (`itemId`, `unitPrice`, `reservedQty`, `shippedQty`), `warehouseId` na
+  encomenda, reserva atómica ao confirmar (`onHand − reserved` com UPDATE
+  condicional anti-race em `lib/stock.ts`), linhas de expedição
+  (`shipment_lines`) a partir das quantidades pendentes, saída automática de
+  stock na transição para `in_transit` e devolução/libertação no cancelamento —
+  tudo centralizado em `lib/shipment-flow.ts` usado por backoffice, rotas,
+  motorista e eventos de transportadora.
+- **Custos automáticos**: motor de tarifas (`lib/rating.ts`) com bases
+  `flat`/`per_kg`/`per_km`/`per_package` e `minCharge`;
+  `GET /shipments/:id/quotes` (cotação ordenada com motivo de falta),
+  `POST /:id/apply-rate` (insere custo `freight` com `rateId`) e aplicação
+  automática ao planear a expedição.
+- **Geolocalização**: geocodificação Nominatim com cache em BD e rate limit
+  (`lib/geo.ts`), coordenadas e distância estimada em expedições e paragens,
+  `haversineKm` × `ROAD_DISTANCE_FACTOR`. Desativado em testes (`NODE_ENV=test`
+  → noop) e com `GEOCODER=none`.
+- **Tracking público**: `trackingToken` por expedição, página pública
+  `/track/:token` (sem auth) com timeline, mapa Leaflet, posição GPS e POD;
+  endpoint `GET /api/track/:token` filtra eventos internos (notas/stock) e
+  não expõe morada completa nem email.
+- **Notificações ao destinatário**: email (SMTP via `SMTP_URL`, senão consola)
+  e SMS (`SMS_PROVIDER=twilio` ou consola) na entrada em trânsito e na entrega,
+  com link de tracking; eventos `notification` registados na timeline.
+- **Documentos AT (DL 198/2012)**: emissão de guias GT/GR com numeração por
+  série, ATCUD (código de validação da série), assinatura RSA-SHA1 em cadeia e
+  QR (Portaria 363/2010), comunicação à AT via SOAP/WS-Security em modo
+  `mock` (dev/teste) ou `live` (portos 401/701, certificados por env);
+  validação de NIF PT (módulo 11) e mensagens de erro por campo em falta.
+- **PDFs**: guia de transporte (com ATCUD/QR), carta CMR e etiquetas com
+  código de barras — PDFKit + bwip-js; `GET /shipments/:id/documents/{guide,cmr,labels}.pdf`.
+- **App do motorista**: função `driver` com permissão exclusiva `driver:app`;
+  rotas atribuídas (`driverUserId`), transições de paragem com GPS,
+  prova de entrega (assinatura desenhada + foto + coords + nome) que conclui
+  a paragem e entrega a expedição, posição GPS periódica (`route_positions`,
+  última posição exposta na expedição, tracking e rota).
+- **Transportadoras**: `carrier_connections` com credenciais cifradas AES-256-GCM
+  (`lib/secrets.ts`, `SECRETS_KEY` obrigatório em produção); adaptadores
+  CTT/DPD/Nacex (`sandbox` simulado; Nacex com modo `live`);
+  `POST /:id/book` (nº de tracking + evento) e `POST /:id/sync-tracking`
+  (eventos novos sem duplicar + transição automática); push de eventos na
+  API v1 (`POST /api/v1/carrier-events` por nº de tracking).
+- **Relatórios**: `GET /api/reports/overview` (expedições, on-time, custos por
+  expedição/kg/tipo, por transportadora e cliente, semanas, rotas/PODs) e
+  `GET /api/reports/shipments.csv` com permissão `reports:read`.
+- **Frontend**: página pública `/track/:token`, app `/driver` (rota atribuída →
+  paragens → POD com canvas de assinatura e foto), `/reports` com KPIs e
+  exportação CSV, mapa Leaflet em expedição e rota, cartão de operações na
+  expedição (cotações/aplicar tarifa, emitir guia AT, PDFs, marcar/sincronizar
+  transportadora, link de tracking), linhas de expedição e PODs visíveis,
+  formulário de encomenda com artigo+armazém+preço, destinatário na nova
+  expedição, motorista (utilizador) na nova rota, dados fiscais + AT nas
+  definições, ligações de transportadoras nas integrações, nav filtrada por
+  permissões e papel `driver` nos convites.
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **143/143 ✅** (29 novos em `ops.test.ts`: reserva/saída/devolução de stock, cotação e tarifa, guia AT+ATCUD+PDFs, tracking público, POD via app do motorista, ligação+booking+sync Nacex sandbox, push API v1, relatórios, isolamento de tenant) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + Web | ✅ |
+| Build Web | ✅ |
+| Playwright e2e | **8/8 ✅** |
+
+### Limitações conhecidas
+
+- AT em `live` exige certificados e chaves reais por env; só o modo `mock`
+  foi exercido em testes. O mesmo para Nacex `live` (CTT/DPD só sandbox).
+- SMS real depende de Twilio configurado; geocodificação é Nominatim (limite
+  1 req/s — distância estimada por fator, sem matriz de rotas reais).
+- Otimização de rotas, EDI e integrações ERP/e-commerce ficam para fases
+  seguintes.
+
+---
+
+## Fase 10 — Otimização de paragens, importação CSV, reposição, ETA e i18n EN ✅ (2026-10-21)
+
+### Implementado
+
+- **Otimização de paragens** (`POST /api/routes/:id/optimize`): reordena as
+  paragens pendentes por proximidade via nearest-neighbor sobre as coordenadas
+  (`optimizeStopOrder` em `lib/geo.ts`). Ponto de partida opcional
+  (`startLat`/`startLng`) ou última posição GPS da rota; paragens já
+  iniciadas/concluídas mantêm a posição e as sem coordenadas ficam no fim.
+  Botão «Otimizar paragens» no detalhe da rota.
+- **Importação CSV em massa** (`lib/csv.ts` — separador `;`/`,` detetado
+  automaticamente, campos entre aspas, máx. 500 linhas):
+  `POST /api/partners/import` e `POST /api/items/import` aceitam `{ csv }`,
+  validam cada linha com os schemas partilhados, criam as válidas e devolvem
+  erros por número de linha. Cabeçalhos em inglês ou português (tipos
+  `cliente|fornecedor|transportadora`, `nome`, `nif`, `unidade`, `peso`…);
+  SKUs duplicados são saltados. Diálogo `CsvImportDialog` nas páginas de
+  parceiros e artigos.
+- **Ponto de reposição** (migração `0009`): `stock_levels.reorder_point` por
+  artigo × armazém; `PUT /api/stock/reorder-point` (upsert da linha de stock)
+  e `GET /api/stock/alerts` (disponível `on_hand − reserved` ≤ ponto, com
+  `deficit`). UI: faixa de alertas de rutura no separador Stock e clique no
+  valor para definir o ponto.
+- **ETA no tracking público**: `estimatedArrivalAt` no DTO público —
+  distância restante (última posição GPS → destino) × fator rodoviário a
+  50 km/h, só quando `in_transit`; mostrado na página `/track/:token`.
+- **Idioma en-GB**: `i18n/en-GB.ts` completo, deteção por
+  `navigator.language` (pt* → pt-PT, resto → en-GB), persistência em
+  `localStorage` e seletor no menu do utilizador (`document.lang` atualizado).
+- **Dependências**: `vitest` 3.2.7 → 5.0.5 — `npm audit` de 7 vulnerabilidades
+  (2 críticas: `tinypool`, `@vitest/mocker`) para 4 moderadas, todas dev-only
+  em `esbuild` antigo dentro do `drizzle-kit` (fix exigiria downgrade
+  breaking; não aplicado).
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **150/150 ✅** (7 novos em `phase10.test.ts`: import parceiros/artigos com erros por linha e CSV vazio, ponto de reposição + alerta + limpeza, otimização NN com coords injetadas, ETA no tracking) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + Web | ✅ |
+| Build Web | ✅ |
+
+### Limitações conhecidas
+
+- A otimização usa distância em linha reta (× fator) — sem matriz de tempos
+  reais, janelas horárias ou capacidade (OSRM/Valhalla numa fase posterior).
+- ETA assume velocidade média fixa (50 km/h), sem trânsito.
+- Importação CSV sem preview/mapeamento de colunas nem exportação modelo
+  (.xlsx futuro).
+- As 4 vulnerabilidades moderadas restantes são dev-only (`esbuild` via
+  `drizzle-kit`) — acompanhar upgrade compatível do drizzle-kit.
+- EDI/ERP, MFA/SSO, auditoria de faturas de frete e WMS avançado (lotes,
+  bins, picking) continuam em aberto.
+
+---
+
+## Fase 11 — MFA/TOTP, auditoria de faturas de frete, CSV de encomendas e contagem de stock ✅ (2026-10-23)
+
+### Implementado
+
+- **MFA/TOTP** (RFC 6238, sem dependências — `lib/totp.ts`): segredo base32,
+  HMAC-SHA1, janela 30 s ±1.
+  - `POST /api/auth/mfa/setup` gera segredo (guardado **cifrado** AES-256-GCM
+    via `lib/secrets.ts`) + URI `otpauth://`; `/mfa/enable` e `/mfa/disable`
+    confirmam com código (desativar revoga as outras sessões).
+  - Login em duas fases: com MFA ativo, `POST /login` devolve
+    `{ mfaRequired, mfaToken }` (JWT 5 min com `purpose: "mfa"`) sem emitir
+    sessão; `POST /mfa/verify` troca-o por sessão completa. Tokens com
+    `purpose` são rejeitados por `authenticate`/`requirePermission`, logo o
+    mfaToken não funciona como access token.
+  - UI: passo de código no login e cartão `MfaCard` nas definições
+    (segredo + URI otpauth, ativar/desativar).
+- **Auditoria de faturas de frete** (tabela `carrier_invoices`, migração
+  `0010`): `POST /api/freight-invoices` regista a fatura da transportadora e
+  calcula `expectedAmount` (soma dos custos `freight` da expedição na mesma
+  moeda), `variance` e estado (`pending` sem expedição/custos, `matched`
+  |desvio| ≤ 0,01, `discrepancy`). `GET /` com filtros e resumo
+  (pendentes/conformes/discrepâncias + desvio total). Página
+  `/freight-invoices` com badges de resumo, filtro por estado e diálogo de
+  registo (transportadora + expedição opcional).
+- **Scorecard de transportadora** no relatório overview: por transportadora
+  junta-se `podRate` (PODs/entregas), `invoices` e `invoiceDiscrepancies` no
+  período; colunas POD e Faturas na tabela do relatório.
+- **Importação CSV de encomendas** (`POST /api/orders/import`): linhas com a
+  mesma `ref`/`encomenda` são agrupadas (multi-linha); cliente resolvido por
+  `cliente` (nome exato) ou `nif`, armazém por nome, artigos por `sku`.
+  Criadas em rascunho (a reserva de stock acontece ao confirmar); peso vem do
+  artigo quando a linha tem SKU. Erros reportados por linha do grupo.
+  `CsvImportDialog` na página de encomendas.
+- **Contagem física de stock** (tabelas `inventory_counts` +
+  `inventory_count_lines`, numeração `CNT-XXXXX`): `POST /api/inventory-counts`
+  faz snapshot do `on_hand` por artigo no armazém (ou dos `itemIds` dados);
+  `PATCH /:id/lines` regista quantidades contadas; `POST /:id/apply` gera um
+  movimento `adjust` por divergência (quebras respeitam o stock reservado) e
+  fecha a contagem; `POST /:id/cancel`. Separador «Contagens» na página de
+  inventário com diálogo de registo linha a linha.
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **163/163 ✅** (13 novos em `phase11.test.ts`: enroll+código errado/correto, desafio no login, mfaToken rejeitado como access token, verify; fatura conforme/discrepante/pendente + resumo + scorecard; CSV encomendas multi-linha com erros; contagem snapshot→linhas→apply→movimentos, apply duplo e cancel) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + Web | ✅ |
+| Build Web | ✅ |
+| Playwright e2e | **8/8 ✅** |
+
+### Limitações conhecidas
+
+- O segredo TOTP é mostrado como texto + URI `otpauth://` (sem imagem QR —
+  adicionar `qrcode` no futuro); sem códigos de recuperação (recovery codes)
+  — se o utilizador perder o dispositivo, só um admin o pode ajudar criando
+  nova conta ou desativando MFA via suporte.
+- Auditoria de faturas compara com custos `freight` registados na expedição;
+  não faz match automático por número de fatura nem importa faturas em
+  massa/EDI.
+- A contagem faz snapshot de artigos **com registo de stock**; artigos sem
+  nível no armazém não entram (adicionar linhas manualmente numa fase
+  posterior). Sem contagem cíclica agendada nem contagens por zona/bin.
+- Continuam em aberto: EDI/ERP, SSO, WMS avançado (lotes, séries, bins,
+  picking/packing), matriz de distâncias reais e faturação ao cliente.
+
+## Fase 12 — Frota, devoluções, picking, torre de controlo e contagens por seleção
+
+- **Frota de viaturas** (tabela `vehicles`, migração `0011_grey_squadron`):
+  CRUD `/api/vehicles` com matrícula única por tenant, tipo
+  (carrinha/camião/ligeiro/mota/outro), capacidade em kg e ativação.
+  `routes.vehicle_id` liga a viatura à rota — ao atribuir, `vehicleRef` fica
+  automaticamente com a matrícula; PATCH sincroniza a matrícula ao trocar de
+  viatura. Viaturas inativas são rejeitadas. Página `/vehicles` + seletor no
+  formulário de nova rota.
+- **Devoluções RMA** (tabelas `returns` + `return_lines`, numeração
+  `DEV-XXXXX`): `POST /api/returns` com cliente + armazém + encomenda
+  opcional + linhas (artigo ou texto livre — descrição derivada do nome do
+  artigo quando omitida). `POST /:id/receive` dá entrada em stock (movimento
+  `in`) por linha com artigo — suporta receção parcial e fecha quando nada
+  falta; `POST /:id/cancel`. Página `/returns` com criação multi-linha,
+  detalhe e ações receber/anular.
+- **Guia de picking**: `GET /api/orders/:id/picklist` devolve as linhas por
+  expedir (encomendado − expedido) com reservado e stock disponível no
+  armazém da encomenda (0 quando o artigo não tem registo);
+  `GET .../picklist.pdf` gera a guia A4 com grelha SKU/artigo/a
+  separar/disponível, coluna «apanhado» e assinaturas
+  separado/conferido/embalado. Card de picking + botão PDF no detalhe da
+  encomenda.
+- **Torre de controlo**: `GET /api/reports/exceptions` agrega exceções
+  ativas — expedições em atraso (data prevista passada, por entregar; alta),
+  entregues sem POD (média) e em curso sem transportadora (média) —
+  ordenadas por severidade. Secção na página de relatórios com contadores e
+  tabela ligada às expedições.
+- **Contagem por seleção**: `POST /api/inventory-counts` com `itemIds`
+  inclui os artigos escolhidos mesmo sem registo de stock (esperado 0) —
+  permite contar artigos que deveriam existir; diálogo «Nova contagem» passa
+  a ter âmbito todos/selecionados com lista de checkboxes.
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **178/178 ✔** (15 novos em `phase12.test.ts`: viatura CRUD + matrícula duplicada + atribuição/sincronização + inativas; RMA criar/receção parcial/total/anular + entrada em stock; picklist JSON + PDF + linha expedida; exceções; contagem com seleção + artigo sem stock + inexistente) |
+| Web Vitest | 2/2 ✔ |
+| Typecheck API + Web | ✔ |
+| Build Web | ✔ |
+
+### Limitações conhecidas
+
+- A receção da devolução não faz inspeção/qualidade (aceitar/rejeitar por
+  linha) nem gera nota de crédito — entra tudo em stock utilizável.
+- A guia de picking não tem percurso otimizado por localizações (bins/zonas
+  ainda não existem) nem modo wave/batch para várias encomendas.
+- Exceções da torre de controlo são derivadas em tempo real (sem tabela de
+  alertas, snooze ou atribuição); sem SLA configurável por cliente.
+
+## Fase 13 — Localizações/bins, intake EDI, portal do cliente, alertas e CO₂ ✅ (2026-10-18)
+
+### Implementado
+
+- **Localizações (bins/zonas)**: tabela `warehouse_locations` (código único por
+  armazém, zona, ativa) + `item_pick_locations` (localização preferencial de
+  picking por artigo/armazém). CRUD `GET/POST /api/warehouses/:id/locations`,
+  `PATCH /api/locations/:id`, atribuição `PUT /api/warehouses/:id/pick-locations`
+  e `GET` do mapa artigo→localização. Importação CSV `codigo;zona` com
+  deduplicação. Picking dirigido: a guia de picking (JSON + PDF) mostra a
+  localização (`ZONA-COD`) e ordena as linhas pelo percurso (zona→código→fim).
+  Separador «Localizações» no inventário com gestão de bins e atribuição por
+  artigo.
+- **Intake EDI/e-commerce (v1)**: `POST /api/v1/inbound-orders` — cria
+  encomenda a partir de referências externas: `externalRef` idempotente
+  (`orders.external_ref` unique por tenant), cliente resolvido por NIF/nome ou
+  criado automaticamente, artigos por SKU (SKU desconhecido fica como linha de
+  texto), armazém por código ou primeiro ativo. `GET /api/v1/stock` expõe
+  níveis de stock paginados para integrações.
+- **Portal do cliente**: `partners.portal_token` + `POST/DELETE
+  /api/partners/:id/portal-link` (gera/roda/revoga token opaco). Endpoint
+  público `GET /api/portal/:token` (rate-limited) devolve encomendas e
+  expedições do cliente com links `/track/:token`. Página pública
+  `/portal/:token`; ação «Link do portal» nos parceiros-clientes copia o URL.
+- **Alertas de atraso**: `alertLateShipments` no scheduler — expedições
+  planned/in_transit com `plannedDeliveryAt` ultrapassada geram evento `alert`
+  na timeline + notificação in-app ao tenant, uma vez (`late_alerted_at`).
+- **CO₂ estimado**: `estimatedCo2Kg` por expedição (distância × t × 0,096 kg
+  CO₂e/t·km, DEFRA) no DTO e soma `shipments.estimatedCo2Kg` no relatório
+  overview + KPI na página.
+- Migração `0012_flimsy_bulldozer`.
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **189/189 ✅** (11 novos em `phase13.test.ts`: localizações CRUD + CSV, picking ordenado por zona, inbound-orders cria/idempotente/NIF, stock na v1, portal link/revogação, alertas scheduler, CO₂) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + Web | ✅ |
+| Build Web | ✅ |
+| Playwright e2e | 8/8 ✅ |
+
+### Limitações conhecidas
+
+- Localizações são preferenciais (orientação), não contabilizam stock por bin —
+  movimentos continuam ao nível do armazém (putaway/bin-to-bin pendente).
+- O intake EDI é JSON REST, não EDI clássico (X12/EDIFACT) nem conectores
+  prontos Shopify/WooCommerce — mas qualquer sistema consegue chamar o
+  endpoint com chave de API.
+- Portal é read-only (sem criação de encomendas nem documentos para download).
+- Alertas de atraso só correm no scheduler do processo da API (intervalo
+  configurável); sem re-notificação periódica.
+- CO₂ usa fator rodoviário único (0,096 kg/t·km); sem fator por tipo de
+  viatura nem outros modos.
+
+## Fase 14 — Conectores Shopify/WooCommerce, lotes FEFO, wave picking e encomendas no portal ✅ (2026-10-18)
+
+### Implementado
+
+- **Canais de entrada (webhooks e-commerce)**: tabela `inbound_channels`
+  (fonte shopify/woocommerce/generic, token único no URL, segredo HMAC
+  guardado cifrado AES-256-GCM). CRUD em `/api/integrations/inbound-channels`
+  (criar, listar, ativar/desativar). Endpoint público
+  `POST /api/inbound/:token` com parser de corpo bruto: verifica a assinatura
+  por fonte — Shopify `x-shopify-hmac-sha256` (base64), WooCommerce
+  `x-wc-webhook-signature` (base64) e genérico `x-transitum-signature` (hex) —
+  com comparação constant-time. Mapeadores `mapShopifyOrder`/
+  `mapWooCommerceOrder` em `lib/inbound.ts` convertem os payloads
+  (`line_items`, `shipping_address`/`shipping`, cliente por nome/email) para
+  o formato inbound; idempotência por `externalRef` (`shopify:#1001`,
+  `woocommerce:42`). A criação da encomenda partilha `createInboundOrder`
+  com o endpoint v1 (resolução de cliente/SKU/armazém). Card «Lojas e EDI»
+  na página de integrações com URL para copiar.
+- **Lotes com validade + FEFO**: tabela `stock_lots` (código único por
+  tenant+armazém+artigo, `expires_at`, `on_hand`) + `stock_movements.lot_code`.
+  Entradas com `lotCode`/`lotExpiresAt` (movimentos manuais e receção de
+  compras) criam/atualizam lotes (`applyLotDelta`); saídas manuais e saída
+  automática da expedição consomem por **FEFO** (`consumeLotsFefo` — validade
+  mais próxima primeiro, sem-validade por último) e o movimento regista os
+  lotes consumidos na nota. `GET /api/stock/lots` lista lotes com
+  `daysToExpiry` e filtro `expiringDays`. Separador «Lotes» no inventário +
+  campos de lote no diálogo de entrada.
+- **Wave picking**: `POST /api/orders/pick-wave` recebe `orderIds` e agrega
+  as linhas por expedir por (artigo×armazém), com localização preferencial,
+  stock disponível e detalhe por encomenda, ordenado pelo percurso
+  zona→localização. Diálogo «Wave de picking» na página de encomendas
+  (seleção das confirmadas → guia agregada imprimível).
+- **Portal com criação de encomendas**: `POST /api/portal/:token/orders`
+  (rate-limited) cria encomenda em rascunho sempre associada ao cliente do
+  token — endereço herdado do parceiro, armazém por defeito, linhas por SKU
+  ou texto livre, notificação in-app ao tenant. Formulário público na página
+  `/portal/:token`.
+- Migração `0013_dizzy_ikaris`.
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **203/203 ✅** (14 novos em `phase14.test.ts`: canais CRUD, Shopify assinatura OK/falha/idempotente/mapeamento, WooCommerce, genérico hex, token desconhecido, canal inativo, lotes FEFO + validações, wave agregado/ordenado, portal cria/isolamento) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + Web | ✅ |
+| Build Web | ✅ |
+| Playwright e2e | 8/8 ✅ |
+
+### Limitações conhecidas
+
+- Webhooks Shopify/WooCommerce validam assinatura e mapeiam o payload comum
+  de «order created»; campos extra (impostos, envios parciais, clientes com
+  NIF) não são mapeados. Sem retries/queue — o remetente reenvia.
+- Lotes são um desdobramento informativo do `on_hand` (a soma dos lotes pode
+  divergir do nível se houver movimentos sem lote); devoluções de expedições
+  canceladas repõem stock sem lote. Sem stock por bin nem putaway.
+- A wave é uma guia calculada (não persiste atribuição a operador nem estado
+  de separação por linha).
+- Encomendas do portal ficam em rascunho sem preço do catálogo nem validação
+  de stock; o backoffice confirma/edita antes de reservar.
+
+## Fase 15 — Faturação ao cliente, stock por bin, números de série e distâncias reais ✅ (2026-10-18)
+
+### Implementado
+
+- **Faturação ao cliente**: `sales_invoices` + `sales_invoice_lines` (migração
+  `0014_melted_sunset`). CRUD em `/api/sales-invoices` guardado por
+  `billing:read`/`billing:write`, numeração `FT-XXXXX`, ciclo
+  rascunho → emitida → paga (ou anulada). Com `orderId` e sem linhas manuais,
+  copia as linhas com preço da encomenda. Página `/sales-invoices` com filtros,
+  detalhe de linhas e ações de estado.
+- **Stock por bin**: `stock_bin_levels` desagrega o `on_hand` por
+  `warehouse_location` (informativo, como os lotes). Entradas manuais,
+  receções de compra e devoluções aceitam `locationId` (putaway); saídas
+  consomem do bin indicado ou da localização preferencial de picking
+  (`consumeBins`). `POST /api/stock/bin-transfer` move stock entre bins sem
+  alterar o total do armazém (registado como movimento `transfer` com o par
+  de bins na nota); `GET /api/stock/bin-levels` lista por armazém/artigo;
+  `stock_movements.location_id` guarda o bin. Separador «Bins» com
+  transferência guiada e select de bin no diálogo de movimentos.
+- **Números de série**: `items.serialized` + `item_serials` (único por
+  tenant×artigo×série; estados `in_stock`/`issued`). Artigos serializados
+  exigem lista de séries igual à quantidade em entradas, saídas e
+  transferências — movimentos manuais, receções de compra e devoluções
+  (`returnSerials` repõe issued→in_stock). A saída automática da expedição
+  consome as primeiras séries em stock (`issueSerialsAuto`) e regista-as na
+  nota do movimento; o cancelamento repõe as últimas saídas.
+  `GET /api/stock/serials` com filtros q/estado + separador «Séries»;
+  checkbox «Gerido por número de série» no artigo e textarea de séries no
+  movimento.
+- **Distâncias reais (OSRM + cache)**: `lib/routing.ts` chama
+  `GET /route/v1/driving` (`ROUTER`/`ROUTER_URL`, timeout 5 s) com cache
+  persistente em `distance_cache` (par de coordenadas a ~11 m). `routeLeg`
+  devolve km + duração; sem router ou em falha recua para Haversine × fator.
+  Ligado à `distanceKm` das expedições, ao ETA do tracking público (duração
+  real quando disponível) e à otimização de paragens
+  (`optimizeStopOrderAsync` — nearest-neighbor sobre distâncias reais).
+  `NODE_ENV=test` desliga o router.
+- **Code-splitting**: todas as páginas passaram a `React.lazy` com `Suspense`
+  global; `manualChunks` separa vendors (react, leaflet, radix, zod, i18n,
+  icons, shared). O chunk de entrada desce de ~1,1 MB para **156 kB**;
+  o Leaflet (150 kB) só carrega nas páginas com mapa.
+- Correção latente: `return_lines.line_no` — o detalhe da devolução ordenava
+  as linhas por UUID (ordem aleatória, flake nos testes).
+
+### Testes executados
+
+| Suite | Resultado |
+|---|---|
+| API Vitest | **221/221 ✅** (18 novos em `phase15.test.ts`: faturas manual/da encomenda/estados/isolamento, putaway/bin-transfer/consumo dirigido/bin inválido, séries entrada/saída/duplicada/inexistente/receção PO, OSRM cache+fallback) |
+| Web Vitest | 2/2 ✅ |
+| Typecheck API + Web | ✅ |
+| Build Web | ✅ — entry 156 kB, vendors separados |
+| Playwright e2e | 8/8 ✅ |
+
+### Limitações conhecidas
+
+- Faturas são documentos internos (sem PDF nem comunicação AT de faturas);
+  `unitPrice` é o valor final da linha — sem IVA por linha nem totais de IVA.
+- Bins são informativos como os lotes: a soma dos bins pode divergir do
+  `on_hand` quando há movimentos sem localização; transferências entre
+  armazéns não movem bins; a saída da expedição consome bins mas o
+  cancelamento não repõe o bin (o stock volta, a posição não).
+- Séries: transferência entre armazéns exige lista explícita; contagens e
+  ajustes ignoram séries; o auto-pick da expedição escolhe por ordem
+  alfabética da série.
+- OSRM depende do endpoint configurado (público ou self-hosted); sem SLA. A
+  otimização resolve distâncias por par de forma sequencial — mitigado pela
+  cache persistente.
+
+
+## Fase 16 - Faturas fiscais, bins reversiveis, series em contagem, waves persistidas, SSO/OIDC e EDIFACT
+
+### Faturas de venda com IVA + fiscalizacao AT
+
+- Linhas com `taxRate` (23% por defeito, excecao 0/6/13/23); fatura com
+  `subtotal`, `taxTotal` e `total` (bruto), arredondados a centimos por linha.
+- Na emissao (`status -> issued`), a fatura e fiscalizada como as guias:
+  serie prefixada `FT`, sequencial por serie, ATCUD, hash encadeado SHA-256
+  (encadeamento por serie dentro do tenant) e `hashControl`; se o tenant
+  tiver credenciais AT ativas, `app.atClient.communicateInvoice()` envia o
+  documento e grava `atStatus`/`atMessage`.
+- `GET /api/sales-invoices/:id/pdf` gera PDF A4 (`salesInvoicePdf` em
+  `lib/pdf.ts`) com linhas, IVA por linha, totais discriminados, ATCUD e
+  hash parcial; frontend com coluna IVA, totais e botao de download.
+
+### Bins: reversao exata e reconciliacao
+
+- A saida automatica de stock da expedicao regista no movimento `out` os
+  bins/lotes/series consumidos por linha (`B:LOCx2+LOC2x1 | L:LOTx3 | S:a,b`).
+- O cancelamento le essas notas e repoe **nos mesmos bins** as quantidades,
+  e as series voltam a `in_stock` no armazem original.
+- `GET /api/stock/bin-reconciliation` compara `on_hand` com a soma dos bins
+  por armazem+artigo e reporta divergencias (causadas por movimentos sem
+  localizacao). Painel de reconciliacao no separador Localizacoes.
+
+### Contagens serializadas + waves persistidas
+
+- Linhas de contagem aceitam `serialList` para artigos serializados: o
+  `countedQty` deriva da lista; no `apply`, series esperadas nao contadas
+  passam a `written_off` e extras/novas a `in_stock` (validacao de
+  duplicados e de armazem proprietario no PATCH).
+- Tabelas `pick_waves`/`pick_wave_lines` (numeracao `WV-XXXXX`) com operador
+  atribuido e estado `open/in_progress/done/cancelled`. Endpoints
+  `/api/pick-waves` (list/create/detail/patch/lines); o progresso por linha
+  (`pickedQty`) transita a wave automaticamente. Pagina `/pick-waves` e
+  botao "Guardar wave" no dialogo de picking agregado das encomendas.
+
+### SSO/OIDC por tenant
+
+- `sso_providers` (descoberta por dominio de email, clientId, endpoints,
+  segredo cifrado AES-256-GCM, papel por defeito e auto-provisionamento) e
+  `sso_states` (state+nonce com expiracao).
+- CRUD tenant em `/api/sso-providers`; endpoints publicos
+  `GET /api/auth/sso/providers?email=`, `GET /api/auth/sso/start?provider=`,
+  `GET /api/auth/sso/callback` (code exchange, userinfo, login/provisioning
+  com audit). Login page com campo de email para descobrir SSO; pagina
+  `/auth/sso/callback`; card de gestao nas definicoes. `API_BASE_URL`
+  controla o redirect URI (fallback: headers do pedido).
+
+### EDI classico: EDIFACT ORDERS
+
+- `lib/edifact.ts` faz parse de um subconjunto ORDERS D.96A: UNB (remetente),
+  UNH, BGM (numero), DTM, NAD+BY (nome/NIF), LIN/QTY/PRI/IMD; separadores
+  respeitam escapes `?`.
+- `inbound_channels` aceita `source: "edifact"`; `POST /api/inbound/:token`
+  com `Content-Type: application/edifact` ou `text/plain` faz parse e cria a
+  encomenda via o mesmo `createInboundOrder` (idempotente por
+  `edifact:{sender}:{doc}`). Assinatura `x-transitum-signature` (HMAC hex).
+
+### Migracao
+
+- `0015_narrow_menace.sql`: enum `edifact`, `pick_wave_status`, colunas
+  fiscais em `sales_invoices`/`sales_invoice_lines`, `counted_serials` em
+  `inventory_count_lines`, tabelas `pick_waves`, `pick_wave_lines`,
+  `sso_providers`, `sso_states`.
+
+### Testes
+
+- `test/phase16.test.ts`: 20 testes (IVA+fiscalizacao+PDF, reversao de bins
+  e reconciliacao, contagem serializada, waves persistidas, SSO, EDIFACT).
+- Suite: 241/241 API, 2/2 web, typechecks e build verdes, e2e 8/8.
+
+### Limitacoes conhecidas
+
+- IVA e um valor por linha (sem codigos de isencao nem regimes); o PDF nao
+  inclui QR code AT (espaco reservado para quando a certificacao exigir).
+- A comunicacao AT de faturas usa o endpoint de guias do provider mock —
+  em producao real exige o webservice de faturas da AT.
+- Reconciliacao bin<>nivel e so de leitura (reporta, nao corrige).
+- SSO e OIDC authorization-code apenas (sem SAML nem SCIM; JIT cria o user
+  com o papel configurado, sem mapeamento de grupos do IdP).
+- EDIFACT e o subconjunto ORDERS descrito (sem CONTRL/APERAK, EDIFACT de
+  resposta, nem transporte SFTP/AS2/MFT); conectores especificos de ERP
+  (Primavera/PHC) continuam fora de ambito.

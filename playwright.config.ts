@@ -12,11 +12,13 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: "retain-on-failure",
+    // A app deteta o idioma por navigator.language — os specs usam texto pt-PT
+    locale: "pt-PT",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: "npm run dev -w @blujay/api",
+      command: "npm run dev -w @transitum/api",
       url: `http://127.0.0.1:${API_PORT}/api/health`,
       timeout: 90_000,
       reuseExistingServer: false,
@@ -27,11 +29,11 @@ export default defineConfig({
         DATABASE_URL: "",
         JWT_SECRET: "e2e-secret-key-playwright-only-01234567",
         WEB_BASE_URL: `http://localhost:${WEB_PORT}`,
-        PLATFORM_ADMIN_EMAILS: "e2e-admin@blujay.dev",
+        PLATFORM_ADMIN_EMAILS: "e2e-admin@transitum.dev",
       },
     },
     {
-      command: "npm run dev -w @blujay/web",
+      command: "npm run dev -w @transitum/web",
       url: `http://localhost:${WEB_PORT}`,
       timeout: 90_000,
       reuseExistingServer: false,

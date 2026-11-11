@@ -19,7 +19,7 @@ describe("registo de empresa", () => {
     expect(json.user.role).toBe("admin");
     expect(json.user.status).toBe("active");
     expect(json.tenant.name).toBe("Logística Norte");
-    expect(res.cookies.find((c) => c.name === "blujay_rt")).toBeTruthy();
+    expect(res.cookies.find((c) => c.name === "transitum_rt")).toBeTruthy();
     expect(body.email).toBe(json.user.email);
   });
 
@@ -84,12 +84,12 @@ describe("me", () => {
 describe("refresh token", () => {
   it("rota o token e revoga reutilização", async () => {
     const { res } = await registerTenant(t.app);
-    const cookie = res.cookies.find((c) => c.name === "blujay_rt")!;
+    const cookie = res.cookies.find((c) => c.name === "transitum_rt")!;
 
     const refresh1 = await t.app.inject({
       method: "POST",
       url: "/api/auth/refresh",
-      cookies: { blujay_rt: cookie.value },
+      cookies: { transitum_rt: cookie.value },
     });
     expect(refresh1.statusCode).toBe(200);
     expect(refresh1.json().accessToken).toBeTruthy();
@@ -98,7 +98,7 @@ describe("refresh token", () => {
     const reuse = await t.app.inject({
       method: "POST",
       url: "/api/auth/refresh",
-      cookies: { blujay_rt: cookie.value },
+      cookies: { transitum_rt: cookie.value },
     });
     expect(reuse.statusCode).toBe(401);
   });

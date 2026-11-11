@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import type { AdminInvoiceDto, AdminTenantDto, PlanDto } from "@blujay/shared";
+import type { AdminInvoiceDto, AdminTenantDto, PlanDto } from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

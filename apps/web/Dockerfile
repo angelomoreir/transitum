@@ -1,5 +1,5 @@
 # Web — build a partir da raiz do monorepo:
-#   docker build -f apps/web/Dockerfile -t blujay-web .
+#   docker build -f apps/web/Dockerfile -t transitum-web .
 FROM node:22-alpine AS build
 WORKDIR /app
 
@@ -11,7 +11,12 @@ RUN npm ci
 
 COPY packages/shared packages/shared
 COPY apps/web apps/web
-RUN npm run build -w @blujay/web
+# VITE_DEMO=1 mostra a caixa de credenciais demo na página de login
+ARG VITE_DEMO=0
+ARG VITE_DEMO_EMAIL=demo@transitum.local
+ARG VITE_DEMO_PASSWORD=Demo12345!
+ENV VITE_DEMO=$VITE_DEMO VITE_DEMO_EMAIL=$VITE_DEMO_EMAIL VITE_DEMO_PASSWORD=$VITE_DEMO_PASSWORD
+RUN npm run build -w @transitum/web
 
 FROM nginx:alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf

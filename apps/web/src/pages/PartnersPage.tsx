@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { MoreHorizontal, Pencil, Plus } from "lucide-react";
+import { FileUp, Link2, MoreHorizontal, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   partnerCreateSchema,
   PARTNER_TYPES,
   type PartnerDto,
   type PartnerType,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CsvImportDialog } from "@/components/CsvImportDialog";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ export function PartnersPage() {
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<PartnerDto | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     const res = await api<{ items: PartnerDto[]; total: number }>("/api/partners", {
@@ -88,6 +90,20 @@ export function PartnersPage() {
     }
   };
 
+  /** Gera/roda o link do portal do cliente e copia o URL absoluto. */
+  const copyPortalLink = async (p: PartnerDto) => {
+    try {
+      const res = await api<{ portalUrl: string }>(`/api/partners/${p.id}/portal-link`, {
+        method: "POST",
+      });
+      const url = `${window.location.origin}${res.portalUrl}`;
+      await navigator.clipboard.writeText(url);
+      toast.success(t("partners.portalLinkCopied"));
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -96,13 +112,28 @@ export function PartnersPage() {
           <p className="text-sm text-muted-foreground">{t("partners.subtitle")}</p>
         </div>
         {can("partners:write") && (
-          <Button onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" />
-            {t("partners.new")}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImporting(true)} data-testid="import-partners">
+              <FileUp className="h-4 w-4" />
+              {t("import.title")}
+            </Button>
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4" />
+              {t("partners.new")}
+            </Button>
+          </div>
         )}
         {creating && (
           <PartnerForm open onOpenChange={setCreating} onDone={load} />
+        )}
+        {importing && (
+          <CsvImportDialog
+            open
+            onOpenChange={setImporting}
+            endpoint="/api/partners/import"
+            template={t("import.templates.partners")}
+            onDone={load}
+          />
         )}
       </div>
 
@@ -199,6 +230,12 @@ export function PartnersPage() {
                             <Pencil className="h-4 w-4" />
                             {t("partners.edit")}
                           </DropdownMenuItem>
+                          {p.types.includes("customer") && (
+                            <DropdownMenuItem onClick={() => void copyPortalLink(p)}>
+                              <Link2 className="h-4 w-4" />
+                              {t("partners.portalLink")}
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             className={p.active ? "text-destructive" : undefined}
                             onClick={() => toggleActive(p)}

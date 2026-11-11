@@ -1,14 +1,24 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { eq } from "drizzle-orm";
-import { hasPermission, type Permission, type Role } from "@blujay/shared";
+import { hasPermission, type Permission, type Role } from "@transitum/shared";
 import { tenants } from "../db/schema.js";
 import { forbidden, unauthorized } from "../lib/errors.js";
 
+interface JwtUser {
+  sub: string;
+  tid: string;
+  role: Role;
+  name: string;
+  email: string;
+  /** Tokens com propósito especial (ex.: desafio MFA) não são tokens de acesso */
+  purpose?: string;
+}
+
 declare module "@fastify/jwt" {
   interface FastifyJWT {
-    payload: { sub: string; tid: string; role: Role; name: string; email: string };
-    user: { sub: string; tid: string; role: Role; name: string; email: string };
+    payload: JwtUser;
+    user: JwtUser;
   }
 }
 
@@ -28,6 +38,7 @@ export const authPlugin = fp(async (app) => {
     } catch {
       throw unauthorized();
     }
+    if (req.user.purpose) throw unauthorized();
   });
 
   app.decorate("requirePermission", (permission: Permission) => {
@@ -37,6 +48,7 @@ export const authPlugin = fp(async (app) => {
       } catch {
         throw unauthorized();
       }
+      if (req.user.purpose) throw unauthorized();
       if (!hasPermission(req.user.role, permission)) {
         throw forbidden();
       }

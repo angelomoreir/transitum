@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Download, FileText, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { DOC_ENTITY_TYPES, type DocEntityType, type DocumentDto } from "@blujay/shared";
+import { DOC_ENTITY_TYPES, type DocEntityType, type DocumentDto } from "@transitum/shared";
 import { api, ApiRequestError, apiDownload, saveBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

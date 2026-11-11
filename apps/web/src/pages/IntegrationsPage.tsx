@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, KeyRound, Plus, Trash2, Webhook } from "lucide-react";
 import { toast } from "sonner";
-import type { ApiKeyDto, WebhookDeliveryDto } from "@blujay/shared";
+import type { ApiKeyDto, WebhookDeliveryDto } from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CarrierConnectionsCard } from "@/components/CarrierConnectionsCard";
+import { InboundChannelsCard } from "@/components/InboundChannelsCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -257,6 +259,10 @@ export function IntegrationsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <InboundChannelsCard />
+
+      <CarrierConnectionsCard />
 
       <Card>
         <CardHeader>

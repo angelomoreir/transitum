@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Truck } from "lucide-react";
+import { ArrowLeft, ClipboardList, Truck } from "lucide-react";
 import { toast } from "sonner";
-import type { OrderDetailDto } from "@blujay/shared";
-import { api, ApiRequestError } from "@/lib/api";
+import type { OrderDetailDto, PickListDto } from "@transitum/shared";
+import { api, apiDownload, ApiRequestError, saveBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { ORDER_STATUS_VARIANT } from "@/pages/OrdersPage";
@@ -26,12 +26,16 @@ export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
   const [order, setOrder] = useState<OrderDetailDto | null>(null);
+  const [pickList, setPickList] = useState<PickListDto | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await api<{ order: OrderDetailDto }>(`/api/orders/${id}`);
       setOrder(res.order);
+      api<{ pickList: PickListDto }>(`/api/orders/${id}/picklist`)
+        .then((r) => setPickList(r.pickList))
+        .catch(() => setPickList(null));
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 404) setNotFound(true);
       else toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
@@ -77,6 +81,22 @@ export function OrderDetailPage() {
           </Badge>
         </div>
         <div className="flex gap-2">
+          {order.status !== "cancelled" && pickList && pickList.lines.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const blob = await apiDownload(`/api/orders/${order.id}/picklist.pdf`);
+                  saveBlob(blob, `picking-${order.number}.pdf`);
+                } catch (err) {
+                  toast.error(err instanceof ApiRequestError ? err.message : t("common.error"));
+                }
+              }}
+            >
+              <ClipboardList className="h-4 w-4" />
+              {t("orders.pickList")}
+            </Button>
+          )}
           {can("orders:write") && order.status === "draft" && (
             <Button onClick={() => setStatus("confirmed")}>{t("orders.confirmOrder")}</Button>
           )}
@@ -103,6 +123,10 @@ export function OrderDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <Row label={t("orders.requestedDate")} value={order.requestedDate ?? "—"} />
+            <Row label={t("orders.warehouse")} value={order.warehouseName ?? "—"} />
+            {order.totalValue > 0 && (
+              <Row label={t("orders.totalValue")} value={`${order.totalValue} €`} />
+            )}
             <Row label={t("orders.deliveryAddress")} value={address || "—"} />
             <Row label={t("partners.country")} value={order.deliveryCountry ?? "—"} />
             <Row
@@ -139,6 +163,46 @@ export function OrderDetailPage() {
         </Card>
       </div>
 
+      {pickList && pickList.lines.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("orders.pickListTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">{t("orders.location")}</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>{t("orders.description")}</TableHead>
+                  <TableHead className="w-24">{t("orders.toPick")}</TableHead>
+                  <TableHead className="w-28">{t("orders.available")}</TableHead>
+                  <TableHead className="w-20">{t("orders.unit")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pickList.lines.map((l, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono text-xs">{l.location ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">{l.sku ?? "—"}</TableCell>
+                    <TableCell>{l.itemName}</TableCell>
+                    <TableCell className="font-medium">{l.toPick}</TableCell>
+                    <TableCell
+                      className={
+                        l.available != null && l.available < l.toPick ? "text-destructive" : ""
+                      }
+                    >
+                      {l.available ?? "—"}
+                    </TableCell>
+                    <TableCell>{l.unit ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("orders.lines")}</CardTitle>
@@ -148,8 +212,12 @@ export function OrderDetailPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
+                <TableHead>SKU</TableHead>
                 <TableHead>{t("orders.description")}</TableHead>
                 <TableHead className="w-24">{t("orders.quantity")}</TableHead>
+                <TableHead className="w-24">{t("orders.unitPrice")}</TableHead>
+                <TableHead className="w-24">{t("orders.reserved")}</TableHead>
+                <TableHead className="w-24">{t("orders.shipped")}</TableHead>
                 <TableHead className="w-28">{t("orders.weightKg")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -157,8 +225,15 @@ export function OrderDetailPage() {
               {order.lines.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="text-muted-foreground">{l.lineNo}</TableCell>
+                  <TableCell className="font-mono text-xs">{l.sku ?? "—"}</TableCell>
                   <TableCell>{l.description}</TableCell>
-                  <TableCell>{l.quantity}</TableCell>
+                  <TableCell>
+                    {l.quantity}
+                    {l.unit ? ` ${l.unit}` : ""}
+                  </TableCell>
+                  <TableCell>{l.unitPrice != null ? `${l.unitPrice} €` : "—"}</TableCell>
+                  <TableCell>{l.reservedQty || "—"}</TableCell>
+                  <TableCell>{l.shippedQty || "—"}</TableCell>
                   <TableCell>{l.weightKg ?? "—"}</TableCell>
                 </TableRow>
               ))}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CreditCard, FileText, Users, KeyRound } from "lucide-react";
 import { toast } from "sonner";
-import type { BillingOverviewDto, PlanDto, SaasInvoiceDto } from "@blujay/shared";
+import type { BillingOverviewDto, PlanDto, SaasInvoiceDto } from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

@@ -5,7 +5,7 @@ import {
   automationDtoSchema,
   automationUpdateSchema,
   type AutomationTrigger,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { automationRules } from "../db/schema.js";

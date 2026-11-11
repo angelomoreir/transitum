@@ -8,7 +8,7 @@ import {
   type CustomsStatus,
   type Incoterm,
   type ShipmentDetailDto,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError, apiDownload, saveBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

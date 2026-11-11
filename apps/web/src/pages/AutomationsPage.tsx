@@ -8,7 +8,7 @@ import {
   type AutomationAction,
   type AutomationDto,
   type AutomationTrigger,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";

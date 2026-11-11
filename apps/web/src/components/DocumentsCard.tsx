@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, FileText, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { DOC_MAX_BYTES, type DocEntityType, type DocumentDto } from "@blujay/shared";
+import { DOC_MAX_BYTES, type DocEntityType, type DocumentDto } from "@transitum/shared";
 import { api, ApiRequestError, apiDownload, fileToBase64, saveBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";

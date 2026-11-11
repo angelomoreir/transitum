@@ -94,7 +94,7 @@ export function createStorage(): StorageDriver {
   if (env.S3_BUCKET) return new S3Storage(env.S3_BUCKET);
   const dir =
     env.NODE_ENV === "test"
-      ? path.join(tmpdir(), `blujay-storage-${process.pid}-${Math.random().toString(36).slice(2)}`)
+      ? path.join(tmpdir(), `transitum-storage-${process.pid}-${Math.random().toString(36).slice(2)}`)
       : env.STORAGE_DIR;
   return new LocalStorage(dir);
 }

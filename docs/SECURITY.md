@@ -6,7 +6,7 @@ Postura de segurança da plataforma e controlos implementados.
 
 - **Access token**: JWT de curta duração (15 min, `JWT_SECRET` obrigatório em
   produção, min. 16 caracteres — usar 32+).
-- **Refresh token**: opaco, cookie `blujay_rt` httpOnly `SameSite=Lax`
+- **Refresh token**: opaco, cookie `transitum_rt` httpOnly `SameSite=Lax`
   `path=/api/auth`, TTL 30 dias; rotação em cada refresh com `replacedById`;
   deteção de reutilização revoga **todas** as sessões do utilizador.
 - **Passwords**: scrypt (`node:crypto`) com salt aleatório + `timingSafeEqual`;
@@ -59,7 +59,7 @@ Postura de segurança da plataforma e controlos implementados.
 
 - `audit_events` para ações sensíveis (auth, utilizadores, estados, billing,
   admin) com ator, IP e metadata.
-- Segredos: `webhookSecret` por regra (HMAC `x-blujay-signature`), nunca
+- Segredos: `webhookSecret` por regra (HMAC `x-transitum-signature`), nunca
   devolvido nas listagens; hash de refresh tokens; zero segredos no repo —
   `.env` real fica fora do git (`.env.example` apenas).
 - RGPD: dados mínimos; direito de apagamento/exportação por tenant fica como

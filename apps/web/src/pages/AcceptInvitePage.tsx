@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { AuthResponse } from "@blujay/shared";
+import type { AuthResponse } from "@transitum/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { AuthLayout } from "@/components/AuthLayout";

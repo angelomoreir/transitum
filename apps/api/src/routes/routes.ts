@@ -11,22 +11,25 @@ import {
   routeUpdateSchema,
   ROUTE_TRANSITIONS,
   stopStatusUpdateSchema,
-  STOP_TRANSITIONS,
   type RouteStatus,
-  type StopStatus,
-} from "@blujay/shared";
+} from "@transitum/shared";
 import { z } from "zod";
 import {
   partners,
+  proofsOfDelivery,
+  routePositions,
   routes,
   routeStops,
-  shipmentEvents,
   shipments,
+  users,
+  vehicles,
 } from "../db/schema.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { notifyTenant } from "../lib/notify.js";
 import { nextNumber } from "../lib/sequences.js";
+import { optimizeStopOrderAsync } from "../lib/routing.js";
+import { transitionStop } from "../lib/stop-flow.js";
 
 const listResponse = z.object({
   items: z.array(routeDtoSchema),
@@ -45,15 +48,11 @@ const ROUTE_STATUS_LABELS: Record<RouteStatus, string> = {
   cancelled: "Cancelada",
 };
 
-const STOP_TYPE_LABELS: Record<string, string> = {
-  pickup: "Recolha",
-  delivery: "Entrega",
-};
-
 function toDto(
   r: RouteRow,
   carrierName: string | null,
   counts: { stopCount: number; doneStops: number } = { stopCount: 0, doneStops: 0 },
+  vehiclePlate: string | null = null,
 ) {
   return {
     id: r.id,
@@ -64,6 +63,9 @@ function toDto(
     carrierId: r.carrierId ?? null,
     carrierName,
     driverName: r.driverName ?? null,
+    driverUserId: r.driverUserId ?? null,
+    vehicleId: r.vehicleId ?? null,
+    vehiclePlate,
     vehicleRef: r.vehicleRef ?? null,
     plannedStartAt: r.plannedStartAt?.toISOString() ?? null,
     plannedEndAt: r.plannedEndAt?.toISOString() ?? null,
@@ -74,7 +76,7 @@ function toDto(
   };
 }
 
-function stopToDto(s: StopRow, shipmentNumber: string | null) {
+function stopToDto(s: StopRow, shipmentNumber: string | null, hasProof = false) {
   return {
     id: s.id,
     seq: s.seq,
@@ -88,6 +90,8 @@ function stopToDto(s: StopRow, shipmentNumber: string | null) {
       postalCode: s.postalCode,
       country: s.country,
     },
+    coords: s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null,
+    hasProof,
     plannedAt: s.plannedAt?.toISOString() ?? null,
     arrivedAt: s.arrivedAt?.toISOString() ?? null,
     doneAt: s.doneAt?.toISOString() ?? null,
@@ -96,6 +100,52 @@ function stopToDto(s: StopRow, shipmentNumber: string | null) {
 }
 
 export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
+  const loadRouteDetail = async (tid: string, id: string) => {
+    const [row] = await baseQuery().where(
+      and(eq(routes.id, id), eq(routes.tenantId, tid)),
+    );
+    if (!row) throw notFound("Rota não encontrada");
+
+    const [stops, proofs, positions] = await Promise.all([
+      app.db
+        .select({ stop: routeStops, shipmentNumber: shipments.number })
+        .from(routeStops)
+        .leftJoin(shipments, eq(routeStops.shipmentId, shipments.id))
+        .where(eq(routeStops.routeId, row.route.id))
+        .orderBy(asc(routeStops.seq)),
+      app.db
+        .select({ stopId: proofsOfDelivery.stopId })
+        .from(proofsOfDelivery)
+        .innerJoin(routeStops, eq(proofsOfDelivery.stopId, routeStops.id))
+        .where(eq(routeStops.routeId, row.route.id)),
+      app.db
+        .select({ lat: routePositions.lat, lng: routePositions.lng, recordedAt: routePositions.recordedAt })
+        .from(routePositions)
+        .where(eq(routePositions.routeId, row.route.id))
+        .orderBy(desc(routePositions.recordedAt))
+        .limit(50),
+    ]);
+    const withProof = new Set(proofs.map((p) => p.stopId));
+
+    return {
+      ...toDto(
+        row.route,
+        row.carrierName,
+        {
+          stopCount: row.stopCount,
+          doneStops: row.doneStops,
+        },
+        row.vehiclePlate,
+      ),
+      stops: stops.map((s) => stopToDto(s.stop, s.shipmentNumber, withProof.has(s.stop.id))),
+      positions: positions.map((p) => ({
+        lat: p.lat,
+        lng: p.lng,
+        recordedAt: p.recordedAt.toISOString(),
+      })),
+    };
+  };
+
   const stopCounts = app.db
     .select({
       routeId: routeStops.routeId,
@@ -111,11 +161,13 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
       .select({
         route: routes,
         carrierName: partners.name,
+        vehiclePlate: vehicles.plate,
         stopCount: sql<number>`coalesce(${stopCounts.stopCount}, 0)`,
         doneStops: sql<number>`coalesce(${stopCounts.doneStops}, 0)`,
       })
       .from(routes)
       .leftJoin(partners, eq(routes.carrierId, partners.id))
+      .leftJoin(vehicles, eq(routes.vehicleId, vehicles.id))
       .leftJoin(stopCounts, eq(routes.id, stopCounts.routeId));
 
   app.get(
@@ -154,10 +206,15 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
       ]);
       return {
         items: items.map((r) =>
-          toDto(r.route, r.carrierName, {
-            stopCount: r.stopCount,
-            doneStops: r.doneStops,
-          }),
+          toDto(
+            r.route,
+            r.carrierName,
+            {
+              stopCount: r.stopCount,
+              doneStops: r.doneStops,
+            },
+            r.vehiclePlate,
+          ),
         ),
         total: count,
         page,
@@ -175,30 +232,29 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: z.object({ route: routeDetailDtoSchema }) },
       },
     },
-    async (req) => {
-      const [row] = await baseQuery().where(
-        and(eq(routes.id, req.params.id), eq(routes.tenantId, req.user.tid)),
-      );
-      if (!row) throw notFound("Rota não encontrada");
-
-      const stops = await app.db
-        .select({ stop: routeStops, shipmentNumber: shipments.number })
-        .from(routeStops)
-        .leftJoin(shipments, eq(routeStops.shipmentId, shipments.id))
-        .where(eq(routeStops.routeId, row.route.id))
-        .orderBy(asc(routeStops.seq));
-
-      return {
-        route: {
-          ...toDto(row.route, row.carrierName, {
-            stopCount: row.stopCount,
-            doneStops: row.doneStops,
-          }),
-          stops: stops.map((s) => stopToDto(s.stop, s.shipmentNumber)),
-        },
-      };
-    },
+    async (req) => ({ route: await loadRouteDetail(req.user.tid, req.params.id) }),
   );
+
+  /** O utilizador motorista tem de existir no tenant e ter a função "driver". */
+  const assertDriver = async (tenantId: string, userId: string) => {
+    const [u] = await app.db
+      .select({ id: users.id, role: users.role, status: users.status })
+      .from(users)
+      .where(and(eq(users.id, userId), eq(users.tenantId, tenantId)));
+    if (!u || u.role !== "driver" || u.status !== "active") {
+      throw badRequest("O motorista tem de ser um utilizador ativo com a função «driver»");
+    }
+  };
+
+  /** A viatura tem de existir no tenant e estar ativa; devolve a matrícula. */
+  const assertVehicle = async (tenantId: string, vehicleId: string) => {
+    const [v] = await app.db
+      .select({ id: vehicles.id, plate: vehicles.plate, active: vehicles.active })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, vehicleId), eq(vehicles.tenantId, tenantId)));
+    if (!v || !v.active) throw badRequest("Viatura não encontrada ou inativa");
+    return v;
+  };
 
   app.post(
     "/",
@@ -247,6 +303,13 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
         }
         shipmentNumbers = new Map(found.map((s) => [s.id, s.number]));
       }
+      if (body.driverUserId) await assertDriver(req.user.tid, body.driverUserId);
+      const vehicle = body.vehicleId ? await assertVehicle(req.user.tid, body.vehicleId) : null;
+
+      // Geocodifica as paragens (cache na BD; falhas ficam sem coordenadas)
+      const stopCoords = await Promise.all(
+        body.stops.map((s) => app.geocoder.geocode(s.address)),
+      );
 
       const number = await nextNumber(app.db, req.user.tid, "route");
       const [route] = await app.db
@@ -257,7 +320,9 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
           name: body.name,
           carrierId: body.carrierId ?? null,
           driverName: body.driverName ?? null,
-          vehicleRef: body.vehicleRef ?? null,
+          driverUserId: body.driverUserId ?? null,
+          vehicleId: body.vehicleId ?? null,
+          vehicleRef: body.vehicleRef ?? vehicle?.plate ?? null,
           plannedStartAt: body.plannedStartAt ? new Date(body.plannedStartAt) : null,
           plannedEndAt: body.plannedEndAt ? new Date(body.plannedEndAt) : null,
           notes: body.notes ?? null,
@@ -280,6 +345,8 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
                   city: s.address.city,
                   postalCode: s.address.postalCode,
                   country: s.address.country,
+                  lat: stopCoords[i]?.lat ?? null,
+                  lng: stopCoords[i]?.lng ?? null,
                   plannedAt: s.plannedAt ? new Date(s.plannedAt) : null,
                   note: s.note ?? null,
                 })),
@@ -299,13 +366,19 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
 
       return reply.code(201).send({
         route: {
-          ...toDto(route, carrierName, {
-            stopCount: insertedStops.length,
-            doneStops: 0,
-          }),
+          ...toDto(
+            route,
+            carrierName,
+            {
+              stopCount: insertedStops.length,
+              doneStops: 0,
+            },
+            vehicle?.plate ?? null,
+          ),
           stops: insertedStops.map((s) =>
             stopToDto(s, s.shipmentId ? (shipmentNumbers.get(s.shipmentId) ?? null) : null),
           ),
+          positions: [],
         },
       });
     },
@@ -345,6 +418,11 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
           throw badRequest("Transportadora inválida");
         }
       }
+      if (req.body.driverUserId) await assertDriver(req.user.tid, req.body.driverUserId);
+      const vehicle =
+        req.body.vehicleId != null
+          ? await assertVehicle(req.user.tid, req.body.vehicleId)
+          : null;
       const [updated] = await app.db
         .update(routes)
         .set({
@@ -353,8 +431,16 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
             req.body.carrierId === null ? null : (req.body.carrierId ?? undefined),
           driverName:
             req.body.driverName === null ? null : (req.body.driverName ?? undefined),
+          driverUserId:
+            req.body.driverUserId === null ? null : (req.body.driverUserId ?? undefined),
+          vehicleId:
+            req.body.vehicleId === null ? null : (req.body.vehicleId ?? undefined),
+          // vehicleId novo atualiza a matrícula; vehicleRef explícito tem prioridade
           vehicleRef:
-            req.body.vehicleRef === null ? null : (req.body.vehicleRef ?? undefined),
+            req.body.vehicleRef === null
+              ? null
+              : (req.body.vehicleRef ??
+                (req.body.vehicleId ? (vehicle?.plate ?? null) : undefined)),
           plannedStartAt:
             req.body.plannedStartAt === null
               ? null
@@ -378,8 +464,14 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
             .from(partners)
             .where(eq(partners.id, updated.carrierId))
         : [null];
+      const [veh] = updated.vehicleId
+        ? await app.db
+            .select({ plate: vehicles.plate })
+            .from(vehicles)
+            .where(eq(vehicles.id, updated.vehicleId))
+        : [null];
       return {
-        route: toDto(updated, carrier?.name ?? null),
+        route: toDto(updated, carrier?.name ?? null, undefined, veh?.plate ?? null),
       };
     },
   );
@@ -475,6 +567,7 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
         .from(routeStops)
         .where(eq(routeStops.routeId, route.id));
 
+      const coords = await app.geocoder.geocode(req.body.address);
       const [stop] = await app.db
         .insert(routeStops)
         .values({
@@ -487,11 +580,89 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
           city: req.body.address.city,
           postalCode: req.body.address.postalCode,
           country: req.body.address.country,
+          lat: coords?.lat ?? null,
+          lng: coords?.lng ?? null,
           plannedAt: req.body.plannedAt ? new Date(req.body.plannedAt) : null,
           note: req.body.note ?? null,
         })
         .returning();
       return reply.code(201).send({ stop: stopToDto(stop, shipmentNumber) });
+    },
+  );
+
+  // Reordena paragens pendentes por proximidade (nearest-neighbor).
+  // Paragens já iniciadas/concluídas mantêm a posição; as sem coordenadas
+  // ficam no fim. Ponto de partida opcional (última posição GPS da rota).
+  app.post(
+    "/:id/optimize",
+    {
+      preHandler: app.requirePermission("routes:write"),
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        body: z
+          .object({
+            startLat: z.number().min(-90).max(90).optional(),
+            startLng: z.number().min(-180).max(180).optional(),
+          })
+          .default({}),
+        response: { 200: z.object({ route: routeDetailDtoSchema, moved: z.number() }) },
+      },
+    },
+    async (req) => {
+      const [route] = await app.db
+        .select()
+        .from(routes)
+        .where(and(eq(routes.id, req.params.id), eq(routes.tenantId, req.user.tid)));
+      if (!route) throw notFound("Rota não encontrada");
+      if (["completed", "cancelled"].includes(route.status)) {
+        throw badRequest("Não é possível otimizar uma rota fechada");
+      }
+
+      const all = await app.db
+        .select()
+        .from(routeStops)
+        .where(eq(routeStops.routeId, route.id))
+        .orderBy(asc(routeStops.seq));
+      const pending = all.filter((s) => s.status === "pending");
+      if (pending.length < 2) {
+        return { route: await loadRouteDetail(req.user.tid, route.id), moved: 0 };
+      }
+
+      let start =
+        req.body.startLat != null && req.body.startLng != null
+          ? { lat: req.body.startLat, lng: req.body.startLng }
+          : null;
+      if (!start) {
+        const [pos] = await app.db
+          .select({ lat: routePositions.lat, lng: routePositions.lng })
+          .from(routePositions)
+          .where(eq(routePositions.routeId, route.id))
+          .orderBy(desc(routePositions.recordedAt))
+          .limit(1);
+        if (pos) start = { lat: pos.lat, lng: pos.lng };
+      }
+
+      const ordered = await optimizeStopOrderAsync(app.db, pending, start, app.log);
+      // As paragens pendentes voltam a ocupar os mesmos "slots" de seq
+      const slots = pending.map((s) => s.seq).sort((a, b) => a - b);
+      let moved = 0;
+      for (let i = 0; i < ordered.length; i++) {
+        if (ordered[i].seq !== slots[i]) moved++;
+        await app.db
+          .update(routeStops)
+          .set({ seq: slots[i] })
+          .where(eq(routeStops.id, ordered[i].id));
+      }
+      await audit(app.db, {
+        tenantId: req.user.tid,
+        actorId: req.user.sub,
+        action: "routes.optimized",
+        entity: "route",
+        entityId: route.id,
+        metadata: { moved, pending: pending.length },
+        ip: req.ip,
+      });
+      return { route: await loadRouteDetail(req.user.tid, route.id), moved };
     },
   );
 
@@ -520,34 +691,13 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
         );
       if (!row) throw notFound("Paragem não encontrada");
 
-      const next = req.body.status;
-      const allowed = STOP_TRANSITIONS[row.stop.status as StopStatus] ?? [];
-      if (!allowed.includes(next)) {
-        throw badRequest(`Transição inválida: ${row.stop.status} → ${next}`);
-      }
-      const now = new Date();
-      const [updated] = await app.db
-        .update(routeStops)
-        .set({
-          status: next,
-          arrivedAt: next === "arrived" ? now : row.stop.arrivedAt,
-          doneAt: next === "done" ? now : undefined,
-          note: req.body.note ?? row.stop.note,
-        })
-        .where(eq(routeStops.id, row.stop.id))
-        .returning();
-
-      // Acompanhamento: concluir paragem regista checkpoint na expedição ligada
-      if (next === "done" && row.stop.shipmentId) {
-        await app.db.insert(shipmentEvents).values({
-          tenantId: req.user.tid,
-          shipmentId: row.stop.shipmentId,
-          type: "checkpoint",
-          description: `${STOP_TYPE_LABELS[row.stop.type]} em ${row.stop.city} concluída (rota ${row.route.number})`,
-          location: `${row.stop.city}, ${row.stop.country}`,
-          createdBy: req.user.sub,
-        });
-      }
+      const updated = await transitionStop(
+        app,
+        { tenantId: req.user.tid, userId: req.user.sub, name: req.user.name, ip: req.ip },
+        row,
+        req.body.status,
+        { note: req.body.note },
+      );
 
       let shipmentNumber: string | null = null;
       if (updated.shipmentId) {
@@ -557,7 +707,12 @@ export const routeRoutes: FastifyPluginAsyncZod = async (app) => {
           .where(eq(shipments.id, updated.shipmentId));
         shipmentNumber = s?.number ?? null;
       }
-      return { stop: stopToDto(updated, shipmentNumber) };
+      const [proof] = await app.db
+        .select({ id: proofsOfDelivery.id })
+        .from(proofsOfDelivery)
+        .where(eq(proofsOfDelivery.stopId, updated.id))
+        .limit(1);
+      return { stop: stopToDto(updated, shipmentNumber, !!proof) };
     },
   );
 

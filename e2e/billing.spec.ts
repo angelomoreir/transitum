@@ -46,7 +46,7 @@ test("administração da plataforma: suspender e reativar tenant", async ({ page
   await page.goto("/register");
   await page.getByLabel("Nome da empresa").fill(`E2E Admin ${stamp}`);
   await page.getByLabel("Nome", { exact: true }).fill("Super Admin");
-  await page.getByLabel("Email").fill("e2e-admin@blujay.dev");
+  await page.getByLabel("Email").fill("e2e-admin@transitum.dev");
   await page.getByLabel("Palavra-passe", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Criar conta" }).click();
   await expect(page.getByRole("heading", { name: "Painel" })).toBeVisible();
