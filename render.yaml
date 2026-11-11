@@ -7,7 +7,7 @@
 #   3. New → Blueprint → apontar a este repo
 #
 # No deploy, o Render pede os valores marcados `sync: false`:
-#   - DATABASE_URL (Neon) — preencher NOS DOIS serviços (api e cron)
+#   - DATABASE_URL (Neon) — na transitum-api
 #   - PLATFORM_ADMIN_EMAILS — o teu email (acesso a /admin)
 #
 # Depois do deploy: correr o seed uma vez contra a Neon
@@ -72,23 +72,5 @@ services:
       - key: VITE_DEMO
         value: "1" # mostra a caixa de credenciais demo no login
 
-  # ── Reset diário dos dados demo (cron) ─────────────────────────────────────
-  - type: cron
-    name: transitum-demo-reset
-    runtime: node
-    region: frankfurt
-    # Cron não tem plano free — corre ~1 min/dia (cêntimos/mês).
-    # Apaga este bloco se preferires correr o reset manualmente.
-    plan: starter
-    schedule: "0 4 * * *" # 04:00 UTC — repovoa o tenant demo do zero
-    buildCommand: npm install
-    startCommand: npm run db:seed -w @transitum/api
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: SEED_DEMO
-        value: "1"
-      - key: SEED_RESET
-        value: "1"
-      - key: DATABASE_URL
-        sync: false # ← mesma connection string Neon
+# Reset manual dos dados demo (cron exige plano pago no Render):
+#   SEED_DEMO=1 SEED_RESET=1 DATABASE_URL=<neon> npm run db:seed -w @transitum/api
