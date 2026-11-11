@@ -34,17 +34,12 @@ services:
         generateValue: true
       - key: COOKIE_SECURE
         value: "true"
-      # URL pública do frontend — necessária para cookies/CORS e links de email
+      # URL pública do frontend — necessária para cookies/CORS e links de email.
+      # (static sites não suportam hostUrl — ajusta se mudares o nome do serviço)
       - key: CORS_ORIGIN
-        fromService:
-          type: web
-          name: transitum-web
-          property: hostUrl
+        value: https://transitum-web.onrender.com
       - key: WEB_BASE_URL
-        fromService:
-          type: web
-          name: transitum-web
-          property: hostUrl
+        value: https://transitum-web.onrender.com
       - key: DEMO_MODE
         value: "true" # protege as contas *@transitum.local de mudanças de password/MFA/suspensão
       - key: PLATFORM_ADMIN_EMAILS
@@ -56,7 +51,6 @@ services:
   - type: web
     name: transitum-web
     runtime: static
-    region: frankfurt
     buildCommand: npm install && npm run build -w @transitum/web
     staticPublishPath: apps/web/dist
     routes:
@@ -83,9 +77,9 @@ services:
     name: transitum-demo-reset
     runtime: node
     region: frankfurt
-    # Se o plano free não for aceite para cron, usa "starter" (cêntimos/mês —
-    # corre ~1 min por dia) ou apaga este bloco e corre o reset manualmente
-    plan: free
+    # Cron não tem plano free — corre ~1 min/dia (cêntimos/mês).
+    # Apaga este bloco se preferires correr o reset manualmente.
+    plan: starter
     schedule: "0 4 * * *" # 04:00 UTC — repovoa o tenant demo do zero
     buildCommand: npm install
     startCommand: npm run db:seed -w @transitum/api
